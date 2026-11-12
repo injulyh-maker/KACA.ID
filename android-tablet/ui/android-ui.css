@@ -27,3 +27,92 @@ button {min-height:38px}
   .studio-dashboard{min-height:calc(100dvh - 150px)}
   .dash-content{min-width:0}
 }
+
+
+/* KACA.ID Android 0.9.91: responsive override for fixed-height Windows layouts.
+   Keep desktop visual identity, but never clip forms or capture controls. */
+html,body{width:100%;max-width:100%;min-width:0;overflow-x:hidden}
+body.android-tablet-ui{overflow-y:auto!important;-webkit-text-size-adjust:100%;touch-action:pan-y}
+body.android-tablet-ui *{box-sizing:border-box}
+body.android-tablet-ui .app{display:flex!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:100dvh!important;overflow:visible!important}
+body.android-tablet-ui .sidebar{position:sticky!important;top:0!important;height:100dvh!important;max-height:100dvh!important;width:clamp(168px,20vw,245px)!important;flex:0 0 clamp(168px,20vw,245px)!important;min-width:0!important;padding:clamp(10px,2vh,23px) 10px!important;overflow-y:auto!important;overscroll-behavior:contain}
+body.android-tablet-ui .sidebar .brand{padding:4px 6px 12px!important;gap:8px!important}
+body.android-tablet-ui .sidebar .brand b{font-size:clamp(13px,1.65vw,19px)!important}
+body.android-tablet-ui .sidebar .nav-label{margin:12px 6px 5px!important}
+body.android-tablet-ui .nav-item{min-width:0!important;width:100%!important;padding:clamp(7px,1.2vh,11px) 8px!important;font-size:clamp(11px,1.25vw,14px)!important;white-space:normal!important}
+body.android-tablet-ui .main{flex:1 1 0!important;width:auto!important;min-width:0!important;max-width:100%!important;min-height:100dvh!important;height:auto!important;overflow:visible!important;padding:clamp(12px,2.8vw,28px)!important}
+body.android-tablet-ui .main header{display:flex!important;flex-wrap:wrap!important;gap:10px!important;min-width:0!important;margin-bottom:clamp(12px,2vh,22px)!important;padding-bottom:clamp(10px,2vh,18px)!important}
+body.android-tablet-ui .main header>div{min-width:0}
+body.android-tablet-ui .main header h1{font-size:clamp(19px,2.5vw,28px)!important;overflow-wrap:anywhere}
+body.android-tablet-ui .main .top-right{gap:8px!important;flex-wrap:wrap!important;justify-content:flex-end!important}
+body.android-tablet-ui #content{width:100%!important;max-width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;overflow:visible!important;overflow-wrap:anywhere}
+body.android-tablet-ui .panel,body.android-tablet-ui .android-settings,body.android-tablet-ui .android-settings-section{max-width:100%;min-width:0}
+body.android-tablet-ui .panel{padding:clamp(12px,2.3vw,22px)!important}
+body.android-tablet-ui .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:clamp(9px,1.6vw,16px)!important}
+body.android-tablet-ui .field{min-width:0!important}
+body.android-tablet-ui .field input,body.android-tablet-ui .field select{min-width:0!important;max-width:100%!important;min-height:39px!important;font-size:clamp(12px,1.4vw,15px)!important}
+body.android-tablet-ui .field input[type=color]{padding:3px!important;max-width:115px!important;height:42px!important}
+body.android-tablet-ui .field input[type=checkbox]{width:auto!important;min-height:0!important;vertical-align:middle}
+body.android-tablet-ui .field small{display:block;line-height:1.5;color:#aaa;font-size:11px;margin-top:5px}
+body.android-tablet-ui .android-readonly{padding:12px;border:1px solid #37373d;border-radius:9px;background:#101014;color:#e7e7eb;font-size:12px;overflow-wrap:anywhere}
+body.android-tablet-ui .android-settings-section{padding:clamp(12px,2vw,18px);border:1px solid #34343a;background:#151518;border-radius:12px;margin:12px 0}
+body.android-tablet-ui .android-settings-section h4{font-size:clamp(13px,1.6vw,17px);margin:0 0 12px;color:#eee}
+body.android-tablet-ui .android-setup-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body.android-tablet-ui .android-setup-list>div{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0;padding:14px;border:1px solid #42424a;background:#161618;border-radius:12px}
+body.android-tablet-ui .android-setup-list small{line-height:1.55;color:#aaa}
+body.android-tablet-ui .android-action-row .btn{min-height:40px;white-space:normal!important}
+body.android-tablet-ui .android-result{grid-template-columns:repeat(2,minmax(0,1fr));max-width:100%}
+body.android-tablet-ui .capture-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;max-width:100%!important;gap:12px!important}
+body.android-tablet-ui .capture-preview{width:100%!important;min-width:0!important;min-height:clamp(210px,48dvh,480px)!important;height:clamp(210px,48dvh,480px)!important;max-height:70dvh!important;overflow:hidden!important}
+body.android-tablet-ui .capture-preview video{object-fit:contain!important;width:100%!important;height:100%!important;max-width:100%!important}
+body.android-tablet-ui .preview-bottom-controls{max-width:100%!important;flex-wrap:wrap!important}
+body.android-tablet-ui .count-overlay{z-index:7}
+body.android-tablet-ui .fullscreen-toggle{right:8px!important;top:8px!important;max-width:125px!important;font-size:10px!important}
+/* Replace Windows dashboard min-height 620px and viewport overflow lock. */
+html body.android-tablet-ui.dashboard-mode .app,html body.android-tablet-ui.dashboard-mode .main,html body.android-tablet-ui.dashboard-mode #content{height:auto!important;min-height:0!important;overflow:visible!important}
+html body.android-tablet-ui.dashboard-mode .main{padding:0!important;min-height:100dvh!important}
+html body.android-tablet-ui.dashboard-mode .main header{display:none!important}
+html body.android-tablet-ui.dashboard-mode .studio-dashboard{width:100%!important;height:auto!important;min-height:100dvh!important;overflow:visible!important;display:flex!important;flex-direction:column!important;justify-content:flex-start!important;padding-bottom:clamp(8px,1.5vh,20px)!important}
+html body.android-tablet-ui.dashboard-mode .dash-content{width:100%!important;min-width:0!important;max-width:100%!important;flex:1 1 auto!important;height:auto!important;min-height:0!important;padding:clamp(20px,3.2vh,40px) clamp(9px,1.4vw,20px) 0!important;display:flex!important;flex-direction:column!important;align-items:center!important}
+html body.android-tablet-ui.dashboard-mode .studio-dashboard .dash-brand{position:relative!important;inset:auto!important;transform:none!important;width:100%!important;max-width:100%!important;min-height:0!important;height:auto!important;padding:0 clamp(12px,3vw,38px)!important;margin:0 auto clamp(6px,1.5vh,18px)!important;display:flex!important;align-items:center!important;justify-content:center!important}
+html body.android-tablet-ui.dashboard-mode .dash-brand h1{font-size:clamp(22px,4vw,42px)!important;max-width:100%!important;text-align:center!important;overflow-wrap:anywhere!important}
+html body.android-tablet-ui.dashboard-mode .dash-camera-card{width:min(100%,clamp(230px,44vw,450px))!important;min-width:0!important;max-width:100%!important;transform:none!important;margin:0 auto!important;padding:clamp(8px,1.7vw,18px)!important;gap:clamp(7px,1.5vh,14px)!important;border-radius:clamp(15px,2vw,30px)!important}
+html body.android-tablet-ui.dashboard-mode .dash-camera-window{width:100%!important;aspect-ratio:16/9!important;min-height:0!important;max-height:31dvh!important;border-radius:clamp(10px,2vw,22px)!important}
+html body.android-tablet-ui.dashboard-mode .dash-gallery-section{width:min(96%,900px)!important;height:clamp(55px,13dvh,140px)!important;min-height:0!important;max-width:100%!important;margin:clamp(7px,1.5vh,16px) auto 0!important;overflow:hidden!important}
+html body.android-tablet-ui.dashboard-mode .dash-gallery-section[hidden]{display:none!important}
+html body.android-tablet-ui.dashboard-mode .dash-mode-actions{gap:clamp(7px,1vw,12px)!important;max-width:100%!important}
+html body.android-tablet-ui.dashboard-mode .dash-start{min-height:40px!important;min-width:clamp(96px,12vw,170px)!important;padding:7px 12px!important;font-size:clamp(11px,1.5vw,15px)!important}
+html body.android-tablet-ui.dashboard-mode .dash-home{top:10px!important;right:10px!important;z-index:15!important}
+/* Compact Android tablet / phone: offcanvas navigation with full-width main. */
+@media(max-width:900px){
+ body.android-tablet-ui .sidebar{position:fixed!important;top:0!important;bottom:0!important;left:0!important;width:min(82vw,275px)!important;max-width:min(82vw,275px)!important;height:100dvh!important;z-index:180!important;transform:translateX(-105%)!important;transition:transform .18s ease!important;box-shadow:6px 0 30px #000a}
+ body.android-tablet-ui.android-drawer-open .sidebar{transform:translateX(0)!important}
+ body.android-tablet-ui .main{margin:0!important;width:100%!important;min-width:0!important;flex:1!important;padding:clamp(10px,2.5vw,18px)!important}
+ html body.android-tablet-ui.dashboard-mode .main{padding:0!important}
+ #androidDrawerToggle{display:block!important;position:fixed!important;left:10px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;z-index:200!important;max-width:min(180px,48vw);font-size:12px!important;padding:10px!important}
+}
+@media(max-width:560px){
+ body.android-tablet-ui .form-grid,body.android-tablet-ui .android-result,body.android-tablet-ui .android-setup-list{grid-template-columns:minmax(0,1fr)!important}
+ body.android-tablet-ui .main .top-right{justify-content:flex-start!important}
+ body.android-tablet-ui .main header{padding-right:36px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-camera-card{width:min(96%,390px)!important}
+}
+/* Short landscape: shrink camera/actions but allow vertical page scroll. */
+@media(orientation:landscape) and (max-height:620px){
+ body.android-tablet-ui .sidebar{padding:8px!important}
+ body.android-tablet-ui .nav-item{padding:6px 8px!important}
+ body.android-tablet-ui .main{padding:10px 14px!important}
+ body.android-tablet-ui .main header{margin-bottom:9px!important;padding-bottom:8px!important}
+ body.android-tablet-ui .main header h1{font-size:clamp(17px,3.4vh,25px)!important}
+ body.android-tablet-ui .panel{padding:12px!important}
+ body.android-tablet-ui .capture-preview{height:clamp(155px,49dvh,280px)!important;min-height:155px!important;max-height:55dvh!important}
+ html body.android-tablet-ui.dashboard-mode .main{padding:0!important}
+ html body.android-tablet-ui.dashboard-mode .dash-content{padding:clamp(7px,2vh,13px) 8px 0!important}
+ html body.android-tablet-ui.dashboard-mode .studio-dashboard .dash-brand{margin:0 auto 5px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-brand h1{font-size:clamp(18px,4.1vh,28px)!important}
+ html body.android-tablet-ui.dashboard-mode .dash-camera-card{width:min(100%,clamp(225px,41vw,350px))!important;padding:8px 11px!important;gap:6px!important;border-radius:18px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-camera-window{max-height:27dvh!important;border-radius:12px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-start{min-height:34px!important;min-width:100px!important;padding:5px 9px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-mode-icon{font-size:17px!important}
+ html body.android-tablet-ui.dashboard-mode .dash-gallery-section{height:clamp(46px,11dvh,75px)!important;margin:6px auto 0!important}
+}
