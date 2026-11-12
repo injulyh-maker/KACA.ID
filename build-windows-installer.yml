@@ -1,0 +1,77 @@
+name: KACA.ID - Windows Installer (Python + VC++ included)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'src/**'
+      - 'cloud_control/**'
+      - 'build/**'
+      - 'main.js'
+      - 'preload.js'
+      - 'requirements.txt'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-windows-installer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js on build runner only
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Set up Python 3.12 on build runner only
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+      - name: Reject customer content from public installer
+        shell: pwsh
+        run: python build/check-publish-assets.py
+      - name: Validate branded KACA.ID icons before building
+        shell: pwsh
+        run: python build/check-brand-assets.py
+      - name: Prepare embedded runtime and Microsoft VC++
+        shell: pwsh
+        run: ./build/prepare-windows-runtime.ps1 -Force
+      - name: Install Electron builder on build runner
+        shell: pwsh
+        run: npm ci --no-audit --no-fund
+      - name: Test offline signed license
+        shell: pwsh
+        run: node tests/publish_license_offline_test.js
+      - name: Validate release navigation, skip and offline sync states
+        shell: pwsh
+        run: node tests/final_release_regression_test.js
+      - name: Verify source packaging and dependencies
+        shell: pwsh
+        run: ./runtime/python/python.exe -I build/test_packaging_configuration.py
+      - name: Build Windows NSIS installer
+        shell: pwsh
+        run: npm run dist:win
+      - name: Verify installer and embedded Python (no global runtime)
+        shell: pwsh
+        run: ./build/verify-windows-installer.ps1
+      - name: Upload EXE for release
+        uses: actions/upload-artifact@v4
+        with:
+          name: KACA-ID-Setup-0.9.90-x64
+          path: |
+            dist/KACA-ID-Setup-0.9.90-x64.exe
+            dist/KACA-ID-Setup-0.9.90-x64.exe.sha256
+            runtime/runtime-build-complete.json
+          if-no-files-found: error
+          retention-days: 30
