@@ -1267,9 +1267,12 @@ def _refresh_drive_qr_output(session):
         # Keep the printable QR copy in Final_Results up to date in that case.
         archive=session.get('local_archive_path')
         if archive and os.path.isdir(archive):
-            final_dir=os.path.join(archive,'Final_Results')
-            os.makedirs(final_dir,exist_ok=True)
-            shutil.copy2(dst,os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg'))
+            try:
+                final_dir=os.path.join(archive,'Final_Results')
+                os.makedirs(final_dir,exist_ok=True)
+                shutil.copy2(dst,os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg'))
+            except OSError as archive_exc:
+                print('[PRINT_QR_ARCHIVE_WARNING]',repr(archive_exc),flush=True)
         return True
     except Exception as exc:
         session['print_qr_ready']=False
