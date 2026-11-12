@@ -1194,8 +1194,12 @@ def _blend_drive_qr(canvas, session):
                 scale = min(cw / float(fw), ch / float(fh))
                 fit_w, fit_h = fw * scale, fh * scale
                 fit_x, fit_y = (cw-fit_w)/2.0, (ch-fit_h)/2.0
-        size = max(200, int(round(min(w*fit_w, h*fit_h))))
-        left = int(round(fit_x + x*fit_w)); top = int(round(fit_y + y*fit_h))
+        size = max(1, int(round(min(w*fit_w, h*fit_h))))
+        # Respect exact QR bounds from the frame editor. The old 200px floor
+        # made small QR regions jump away from the operator's saved position.
+        if size < 64: raise ValueError('Area QR cetak terlalu kecil, perbesar pada pengaturan Frame & Layout.')
+        left = int(round(fit_x + x*fit_w + (w*fit_w-size)/2.0))
+        top = int(round(fit_y + y*fit_h + (h*fit_h-size)/2.0))
         left = max(0, min(cw-size, left)); top = max(0, min(ch-size, top)); size = min(size, cw-left, ch-top)
         import qrcode
         qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
@@ -1259,6 +1263,13 @@ def _refresh_drive_qr_output(session):
             if os.path.isfile(temp):os.unlink(temp)
         session['print_qr_ready']=True
         session.pop('print_qr_error',None)
+        # The Drive URL often becomes available after the initial local archive.
+        # Keep the printable QR copy in Final_Results up to date in that case.
+        archive=session.get('local_archive_path')
+        if archive and os.path.isdir(archive):
+            final_dir=os.path.join(archive,'Final_Results')
+            os.makedirs(final_dir,exist_ok=True)
+            shutil.copy2(dst,os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg'))
         return True
     except Exception as exc:
         session['print_qr_ready']=False
@@ -3761,6 +3772,10 @@ class Handler(BaseHTTPRequestHandler):
             if not live_master_ready:
                 live_master = 'output_live.mp4' if _live_asset_exists('output_live.mp4') else ('output_live.webm' if _live_asset_exists('output_live.webm') else '')
                 live_master_ready=bool(live_master)
+            if still_ready and manifest.get('drive_qr_enabled') and manifest.get('drive_url'):
+                qr_print=os.path.join(session_dir,'output_print_qr.jpg')
+                if not os.path.isfile(qr_print) or not manifest.get('print_qr_ready'):
+                    if _refresh_drive_qr_output(manifest): write_manifest(manifest)
             qr_candidates=[]
             for raw_candidate in (manifest.get('drive_qr_path'), manifest.get('drive_qr_archive_path'),
                                   os.path.join(session_dir,'google_drive_qr.png'),
@@ -3771,7 +3786,7 @@ class Handler(BaseHTTPRequestHandler):
                     (archive_dir and candidate.startswith(archive_dir+os.sep))):
                     qr_candidates.append(candidate)
             qr_available=any(os.path.isfile(candidate) and os.path.getsize(candidate)>0 for candidate in qr_candidates)
-            return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available})
+            return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available,'print_qr_ready':bool(manifest.get('drive_qr_enabled') and os.path.isfile(os.path.join(session_dir,'output_print_qr.jpg'))),'print_qr_error':manifest.get('print_qr_error') or manifest.get('drive_qr_embed_error')})
         if path.startswith('/api/session/') and path.endswith('/status'):
             sid=path.split('/')[3] if len(path.split('/'))>3 else ''
             if not sid.replace('-','').isalnum(): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
@@ -3823,6 +3838,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.stream_file(zip_path, 'application/zip', f'KACA-ID-{sid}-Hasil.zip'); return
             except Exception as exc:
                 return self.send_json({'ok':False,'error':f'Gagal membuat ZIP hasil: {exc}'},500)
+        if path.startswith('/api/session/') and path.endswith('/output-print-qr.jpg'):
+            sid = path.split('/')[3]
+            if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
+            manifest=read_manifest(sid)
+            if not manifest or not manifest.get('drive_qr_enabled'): return self.send_json({'ok':False,'error':'QR cetak tidak diaktifkan untuk sesi ini.'},404)
+            if not manifest.get('drive_url'): return self.send_json({'ok':False,'error':'Tautan Google Drive belum tersedia untuk QR cetak.'},409)
+            if not _refresh_drive_qr_output(manifest): return self.send_json({'ok':False,'error':manifest.get('print_qr_error') or 'JPG QR belum siap.'},409)
+            write_manifest(manifest)
+            self.stream_file(os.path.join(SESSIONS_DIR,sid,'output_print_qr.jpg'),'image/jpeg');return
         if path.startswith('/api/session/') and path.endswith('/output.jpg'):
             sid = path.split('/')[3]
             if not sid.replace('-', '').isalnum(): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
