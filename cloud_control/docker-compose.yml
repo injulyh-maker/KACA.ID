@@ -1,0 +1,20 @@
+services:
+  kaca-cloud:
+    build:
+      context: ..
+      dockerfile: cloud_control/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8086:8086"
+    environment:
+      KACA_CLOUD_DATA_DIR: /var/lib/kaca-cloud
+      KACA_CLOUD_PUBLIC_ORIGIN: ${KACA_CLOUD_PUBLIC_ORIGIN:-https://kacastudio.id}
+      KACA_SMTP_HOST: ${KACA_SMTP_HOST:-}
+      KACA_SMTP_PORT: ${KACA_SMTP_PORT:-587}
+      KACA_SMTP_USERNAME: ${KACA_SMTP_USERNAME:-}
+      KACA_SMTP_PASSWORD: ${KACA_SMTP_PASSWORD:-}
+      KACA_SMTP_FROM: ${KACA_SMTP_FROM:-}
+    volumes:
+      - ./cloud-data:/var/lib/kaca-cloud
+    security_opt:
+      - no-new-privileges:true

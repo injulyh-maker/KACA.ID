@@ -1,0 +1,9 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verifikasi Email - KACA.ID</title><style>:root{font-family:system-ui,Arial,sans-serif;color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#263f6c,#071327 70%);color:#ecf4ff;display:grid;place-items:center;padding:20px}.card{max-width:860px;width:100%;background:#132543;border:1px solid #32527d;border-radius:20px;padding:30px}h1{margin:8px 0 15px}p{line-height:1.55;color:#bacde7}a{color:#9ccbff}button,.button{display:inline-block;background:#5279df;border:0;color:white;padding:13px 18px;border-radius:12px;font-weight:bold;text-decoration:none;cursor:pointer}button:disabled{opacity:.5}input{background:#0c1d36;color:white;border:1px solid #3f5d86;padding:13px;border-radius:10px;width:100%;max-width:530px;font-size:16px}label{display:block;margin:15px 0 6px;font-weight:bold}.message{margin-top:18px;min-height:26px}small{color:#b6cbe8}</style></head><body><main class="card"><h1>Verifikasi email KACA.ID</h1><p>Tekan tombol untuk mengonfirmasi email pendaftaran akun Cloud.</p><button id="confirm">Verifikasi Sekarang</button><p class="message" id="message"></p><a href="/">Kembali ke Login</a></main><script>
+const token=new URLSearchParams(location.hash.slice(1)).get('token')||'';
+history.replaceState(null,'',location.pathname);
+document.getElementById('confirm').onclick=async()=>{
+ const btn=document.getElementById('confirm'),out=document.getElementById('message');btn.disabled=true;
+ try{const r=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});const d=await r.json();out.textContent=r.ok?d.message:(d.detail||'Verifikasi gagal');}
+ catch(e){out.textContent='Jaringan tidak tersedia. Coba lagi.'}finally{btn.disabled=false}
+};
+</script></body></html>
