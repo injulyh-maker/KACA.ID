@@ -1,0 +1,22 @@
+KACA.ID v0.9.63 — Result Slide & Original Photo Separation Patch
+
+Instalasi:
+1. Tutup KACA.ID sepenuhnya.
+2. Cadangkan folder src dan backend.
+3. Ekstrak isi ZIP patch ke folder utama KACA-ID-v0.9.63-WINDOWS-BUILD-SOURCE (folder yang berisi main.js dan run-kaca-id.bat).
+4. Izinkan Replace untuk src/app.js dan backend/camera_server.py.
+5. Jalankan kembali run-kaca-id.bat.
+6. Uji dengan SESI BARU. Sesi lama tidak otomatis dibersihkan atau diubah.
+
+Perubahan:
+- Foto Original tetap disimpan dari frame kamera tanpa filter.
+- Filter hanya dipakai pada foto turunan untuk komposisi frame dan Live Photo dalam frame.
+- Arsip lokal tidak lagi menyalin derivative filtered sebagai Foto Edited.
+- GIF dibuat dari foto original murni.
+- Preview WebM Live Photo ikut disimpan di folder lokal dan ikut paket hasil.
+- Polling status hasil dibuat tidak tumpang tindih dan langsung dimulai setelah slide hasil terbuka.
+- Tombol SELESAI diberi event listener eksplisit dan dipastikan aktif.
+- Endpoint QR menyimpan kembali path QR setelah pembuatan ulang.
+
+Catatan:
+Pemeriksaan sintaks dan tes otomatis terpilih lulus. Belum diuji langsung pada perangkat Windows/kamera/printer pengguna.

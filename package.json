@@ -1,0 +1,106 @@
+{
+  "name": "kaca-id-photobooth",
+  "version": "0.9.90",
+  "description": "KACA.ID 0.9.90 publish preparation - customer-clean assets, offline signed license and results skip",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "dist:win": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  },
+  "build": {
+    "appId": "id.kaca.photobooth",
+    "productName": "KACA.ID Photobooth",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "backend/**/*",
+      "package.json",
+      "requirements.txt",
+      "README-ID.txt",
+      "run-kaca-id.bat",
+      "setup.bat",
+      "README-v0.9.34-ID.txt",
+      "README-v0.9.44-ID.txt",
+      "README-v0.9.46-ID.txt",
+      "README-v0.9.47-ID.txt",
+      "README-v0.9.52-ID.txt",
+      "README-v0.9.54-ID.txt",
+      "setup-runtime.bat",
+      "build/**/*",
+      "README-v0.9.55-PERFORMANCE.txt",
+      "README-v0.9.55-ID.txt",
+      "README-v0.9.56-ID.txt",
+      "README-v0.9.61-FIXES.txt",
+      "!src/assets/dashboard-background.mp4",
+      "!src/**/dashboard-background.mp4",
+      "!backend/**/*.backup*",
+      "!**/*.sqlite3",
+      "!**/data/**",
+      "!**/sessions/**",
+      "!**/frames/*.png",
+      "!**/frames/*.json",
+      "!**/*.env",
+      "!**/node_modules/**",
+      "!src/src/**",
+      "cloud_control/agent.js",
+      "cloud_control/activate.html",
+      "cloud_control/activate-preload.js",
+      "cloud_control/web/favicon.ico"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "KACA-ID-Setup-${version}-x64.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KACA.ID Photobooth",
+      "include": "build/nsis-installer.nsh",
+      "runAfterFinish": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "asar": false,
+    "extraResources": [
+      {
+        "from": "runtime/python",
+        "to": "python",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "runtime/vc_redist.x64.exe",
+        "to": "vc_redist.x64.exe"
+      },
+      {
+        "from": "runtime/runtime-build-complete.json",
+        "to": "runtime-build-complete.json"
+      }
+    ]
+  }
+}

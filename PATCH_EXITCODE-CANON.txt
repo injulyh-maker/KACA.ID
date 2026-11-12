@@ -1,0 +1,21 @@
+KACA.ID v0.9.18 - PATCH DIAGNOSTIK EXIT CODE CANON
+
+Tujuan:
+Menambahkan worker_exitcode ke status Canon dan menampilkannya pada baris CANON DIAG.
+Ini membantu membedakan worker yang berhenti normal dengan proses yang crash pada DLL/EDSDK.
+Patch ini tidak mengubah alur capture, konfigurasi kamera, DLL, atau perilaku Live View.
+
+Pemasangan:
+1. Tutup KACA.ID dan backend.
+2. Cadangkan backend/canon_edsdk_live.py dan src/app.js.
+3. Ekstrak isi ZIP ke folder utama proyek dan izinkan file ditimpa.
+4. Jalankan ulang aplikasi dan ulangi pengujian Canon sampai preview berhenti.
+5. Kirim baris CANON DIAG yang memuat exitcode.
+
+Interpretasi awal:
+- exitcode=null: proses belum selesai / belum tersedia kode keluar.
+- exitcode=0: proses berakhir normal.
+- exitcode negatif pada Windows dapat mewakili exception native; contoh -1073741819 adalah 0xC0000005 (access violation).
+- Kode lain perlu dipetakan sebelum menyimpulkan penyebab.
+
+Patch hanya diuji sintaks dan integritas ZIP. Pengujian fisik EOS 1300D belum dilakukan.

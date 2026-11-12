@@ -1,0 +1,39 @@
+PATCH DIAGNOSTIK CANON LIVE VIEW — KACA.ID v0.9.18
+
+Tujuan
+Patch ini menambahkan heartbeat dari proses Canon EDSDK dan meneruskan status internal native ke log aplikasi. Tujuannya mengidentifikasi apakah aliran berhenti karena:
+- proses worker mati atau tidak lagi mengirim heartbeat;
+- pembaca Pipe frame berhenti;
+- loop native masih berjalan tetapi gagal menghasilkan JPEG;
+- pemanggilan EdsDownloadEvfImage sedang tertahan (download_call_pending / download_call_elapsed);
+- pemanggilan native terus kembali dengan kode error atau stream kosong.
+
+File yang diganti (overlay ke folder instalasi KACA.ID):
+1. backend/canon_edsdk_worker.py
+2. backend/canon_edsdk_live.py
+3. backend/camera_server.py
+4. src/app.js
+
+Cara memasang
+1. Tutup KACA.ID dan hentikan proses backend yang masih berjalan.
+2. Buat salinan cadangan empat file di atas.
+3. Ekstrak ZIP patch ke folder utama instalasi KACA.ID, izinkan file ditimpa.
+4. Jalankan KACA.ID seperti biasa.
+5. Buka menu Perangkat, pilih Canon EOS 1300D, lalu tekan Aktifkan Preview.
+6. Biarkan preview berjalan sampai berhenti/tersendat. Jangan tekan Aktifkan Preview lagi sebelum log diambil.
+7. Salin seluruh bagian Log diagnostik, terutama baris CANON DIAG dan PERINGATAN frame, lalu kirimkan.
+
+Membaca log
+- worker=false: proses worker sudah tidak hidup.
+- frameReader=false: thread pembaca Pipe frame sudah berhenti.
+- heartbeatAge terus membesar: worker tidak lagi mengirim status; bisa tertahan di operasi native atau proses status berhenti.
+- nativeStage=download_* (nama tahap mengikuti implementasi native): menunjukkan tahap terakhir loop native.
+- pending=true dan pendingSec terus naik: pemanggilan download native kemungkinan sedang tertahan.
+- downloads bertambah tetapi nativeFrames tidak: native masih mencoba mengambil frame tetapi callback belum berhasil menyelesaikan frame.
+- downloadErrors / eventErrors dan streamBytes membantu membedakan error EDSDK dari stream kosong.
+
+Catatan
+- Patch ini diagnostik saja. Tidak mengubah DLL EDSDK, mode output EVF, parameter exposure, atau strategi pengambilan frame.
+- Endpoint /api/canon/status juga diselaraskan dengan wrapper proses Canon agar tidak mengakses atribut `running` yang tidak dimiliki wrapper.
+- Pengujian yang dilakukan: kompilasi sintaks Python, pemeriksaan sintaks JavaScript, simulasi worker + heartbeat melalui Pipe, dan pemeriksaan integritas ZIP.
+- Kamera Canon EOS 1300D fisik tidak tersedia untuk uji hardware dalam proses pembuatan patch ini. Hasil uji langsung tetap diperlukan.
