@@ -56,6 +56,13 @@ jobs:
       - name: Validate release navigation, skip and offline sync states
         shell: pwsh
         run: node tests/final_release_regression_test.js
+      - name: Test menu recovery, countdown/shutter audio, and QR print paths
+        shell: pwsh
+        run: |
+          node --check src/app.js
+          node tests/windows_sound_qr_menu_test.js
+          ./runtime/python/python.exe -I -m py_compile backend/camera_server.py
+          ./runtime/python/python.exe -I backend/tests/test_qr_print.py
       - name: Verify source packaging and dependencies
         shell: pwsh
         run: ./runtime/python/python.exe -I build/test_packaging_configuration.py

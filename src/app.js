@@ -1717,7 +1717,13 @@ async function go(page,{autoRecovered=false}={}){
  let lastFailure='';
  for(let attempt=0;attempt<3;attempt++){
   if(request!==kacaMenuRequest)return false;
-  try{await renderKacaMenuOnce(page);}catch(err){lastFailure=err?.message||String(err);}
+  try{
+    const result=await Promise.race([
+      renderKacaMenuOnce(page).then(()=>({ok:true}),err=>({ok:false,error:err})),
+      new Promise(resolve=>setTimeout(()=>resolve({ok:false,timeout:true}),5500))
+    ]);
+    if(!result.ok){lastFailure=result.timeout?'Pemuatan menu melewati batas waktu (5,5 detik).':(result.error?.message||String(result.error));if(result.timeout)navigationGeneration++;}
+   }catch(err){lastFailure=err?.message||String(err);}
   if(request!==kacaMenuRequest)return false;
   await kacaCheckAfterPaint();
   if(request!==kacaMenuRequest)return false;
