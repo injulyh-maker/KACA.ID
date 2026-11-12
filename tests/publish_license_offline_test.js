@@ -1,0 +1,22 @@
+'use strict';
+// Uses only temporary Ed25519 keys. No real customer keys or network access.
+const assert=require('assert');
+const crypto=require('crypto');
+const Module=require('module');
+const original=Module._load;
+Module._load=function(request,parent,isMain){if(request==='electron')return {BrowserWindow:{},dialog:{},ipcMain:{},nativeImage:{}};return original.call(this,request,parent,isMain)};
+const {verifyLicense}=require('../cloud_control/agent.js');
+Module._load=original;
+const {publicKey,privateKey}=crypto.generateKeyPairSync('ed25519');
+const pem=publicKey.export({type:'spki',format:'pem'});
+const device='PC-TEST-MACHINE-123456789';
+const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
+const b64=x=>Buffer.from(x).toString('base64url');
+const sign=payload=>{const body=b64(JSON.stringify(payload));return body+'.'+crypto.sign(null,Buffer.from(body),privateKey).toString('base64url')};
+const ok=sign({device_hash:sha(device),exp:Math.floor(Date.now()/1000)+3600});
+assert.strictEqual(verifyLicense(ok,pem,device).device_hash,sha(device));
+assert.throws(()=>verifyLicense(ok,pem,'OTHER-PC'),/tidak cocok/);
+assert.throws(()=>verifyLicense(sign({device_hash:sha(device),exp:1}),pem,device),/kadaluarsa/);
+const {publicKey:bad}=crypto.generateKeyPairSync('ed25519');
+assert.throws(()=>verifyLicense(ok,bad.export({type:'spki',format:'pem'}),device),/./);
+console.log('[PASS] Ed25519 offline signature, device binding and expiration tests');
