@@ -168,7 +168,7 @@ public final class TabletActivity extends MainActivity {
             else pending.deny();
         }
     }
-    @Override protected void onDestroy(){
+    @Override public void onDestroy(){
         if(webCameraRequest!=null){webCameraRequest.deny();webCameraRequest=null;}
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
         if(web!=null){web.removeJavascriptInterface("AndroidBooth");web.destroy();web=null;}

@@ -5,3 +5,8 @@ android {
  defaultConfig { applicationId 'id.kaca.tablet'; minSdk 33; targetSdk 35; versionCode 90; versionName '0.9.90-beta' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+
+// Loads Windows operator HTML/CSS safely into Android WebView.
+dependencies {
+    implementation "androidx.webkit:webkit:1.12.1"
+}

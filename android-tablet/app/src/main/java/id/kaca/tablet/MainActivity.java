@@ -21,13 +21,13 @@ import android.util.Base64;
 import org.json.*;
 
 /** Offline-first basic Android booth. Does not imitate DSLR/live-photo/printing parity. */
-public final class MainActivity extends Activity {
+public class MainActivity extends Activity {
  static final String CLOUD="https://kacastudio.id";
  static final int PICK_FRAME=101, TAKE_PHOTO=102;
  final ExecutorService worker=Executors.newSingleThreadExecutor();
  android.content.SharedPreferences prefs;
  TextView state; ImageView preview; EditText email, password, code, name;
- Uri pendingCameraUri,frameUri; Bitmap lastResult;
+ Uri pendingCameraUri,frameUri,lastResultUri; Bitmap lastResult;
  final ArrayList<JSONObject> queue=new ArrayList<>();
 
  @Override public void onCreate(Bundle b){super.onCreate(b);
@@ -129,6 +129,7 @@ public final class MainActivity extends Activity {
    android.content.ContentValues values=new android.content.ContentValues();values.put(MediaStore.Images.Media.DISPLAY_NAME,"KACA-RESULT-"+System.currentTimeMillis()+".jpg");values.put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg");values.put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/KACA-ID/Results");
    Uri dest=getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);if(dest==null)throw new IOException("Tidak dapat menyimpan hasil");
    try(OutputStream out=getContentResolver().openOutputStream(dest)){if(out==null||!result.compress(Bitmap.CompressFormat.JPEG,95,out))throw new IOException("JPEG gagal disimpan");}
+   lastResultUri=dest;
    lastResult=result;JSONObject item=new JSONObject().put("id",UUID.randomUUID().toString()).put("finished_at",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.ROOT).format(new Date())).put("event_name","").put("mode","PHOTO").put("payment_method","").put("amount_idr",0).put("verified_paid",false).put("photo_count",1);
    queue.add(item);persistQueue();runOnUiThread(()->{preview.setImageBitmap(lastResult);updateStatus();message("Foto dan frame tersimpan di galeri. Sesi dapat disinkronkan nanti.");});
   }catch(Exception e){message("Gagal memproses foto: "+e.getMessage());}

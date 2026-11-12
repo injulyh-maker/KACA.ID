@@ -28,6 +28,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Package Windows UI HTML and CSS for Android
+        run: python3 android-tablet/tools/prepare_windows_ui.py
+      - name: Verify WebView UI assets
+        run: |
+          node --check android-tablet/ui/android-ui.js
+          test -s android-tablet/app/src/main/assets/www/index.html
+          test -s android-tablet/app/src/main/assets/www/style.css
       - name: Build APK for device testing
         working-directory: android-tablet
         run: gradle --no-daemon :app:assembleDebug
