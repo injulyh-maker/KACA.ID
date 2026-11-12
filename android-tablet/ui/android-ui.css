@@ -116,3 +116,11 @@ html body.android-tablet-ui.dashboard-mode .dash-home{top:10px!important;right:1
  html body.android-tablet-ui.dashboard-mode .dash-mode-icon{font-size:17px!important}
  html body.android-tablet-ui.dashboard-mode .dash-gallery-section{height:clamp(46px,11dvh,75px)!important;margin:6px auto 0!important}
 }
+
+/* Android customer-owned dashboard gallery */
+body.android-tablet-ui .android-gallery-manage{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+body.android-tablet-ui .android-gallery-manage img{height:94px;width:150px;max-width:42vw;object-fit:cover;border-radius:10px;border:1px solid #4c4c52;background:#111}
+html body.android-tablet-ui.dashboard-mode .dash-gallery-section{overflow-x:auto!important;scroll-snap-type:x proximity;scrollbar-width:thin}
+html body.android-tablet-ui.dashboard-mode .dash-gallery-track{display:flex!important;gap:8px!important;width:max-content!important;min-width:100%!important;height:100%!important;animation:none!important;align-items:stretch!important}
+html body.android-tablet-ui.dashboard-mode .dash-gallery-track .android-gallery-card{display:block!important;height:100%!important;width:auto!important;min-width:clamp(130px,24vw,260px)!important;max-width:72vw!important;object-fit:cover!important;border-radius:11px;flex:0 0 auto;scroll-snap-align:start}
+body.android-tablet-ui .android-gallery-manage img,body.android-tablet-ui .android-gallery-card{user-select:none;-webkit-user-select:none}
