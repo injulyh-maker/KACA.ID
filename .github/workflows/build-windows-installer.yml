@@ -71,7 +71,7 @@ jobs:
         run: ./runtime/python/python.exe -I build/test_packaging_configuration.py
       - name: Build Windows NSIS installer
         shell: pwsh
-        run: npm run dist:win
+        run: npm run dist:win -- --publish never
       - name: Verify installer and embedded Python (no global runtime)
         shell: pwsh
         run: ./build/verify-windows-installer.ps1
