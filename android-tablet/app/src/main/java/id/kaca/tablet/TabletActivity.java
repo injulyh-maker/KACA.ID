@@ -143,6 +143,7 @@ public final class TabletActivity extends MainActivity {
             lastVideoUri=getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,values);
             Intent intent=new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
             intent.putExtra(MediaStore.EXTRA_OUTPUT,lastVideoUri);
+            intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,prefs.getInt("video_duration_seconds",30));
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivityForResult(intent,VIDEO_CAPTURE_REQUEST);
         }catch(Exception e){notice("Video tidak dapat dimulai: "+e.getMessage());}
@@ -177,6 +178,16 @@ public final class TabletActivity extends MainActivity {
 
     /** Interface exposed ONLY to bundled appassets UI, never third party sites. */
     public final class Bridge {
+        @JavascriptInterface public void configure(String raw){
+            try{
+                if(raw==null||raw.length()>300)throw new Exception("Input pengaturan tidak valid");
+                JSONObject opts=new JSONObject(raw);
+                int quality=opts.optInt("jpegQuality",95);
+                int duration=opts.optInt("videoDuration",30);
+                if(quality<65||quality>100||duration<5||duration>180)throw new Exception("Nilai pengaturan di luar batas");
+                prefs.edit().putInt("jpeg_quality",quality).putInt("video_duration_seconds",duration).apply();
+            }catch(Exception e){notice("Pengaturan Android gagal: "+e.getMessage());}
+        }
         @JavascriptInterface public String status(){
             JSONObject obj=new JSONObject();
             try{

@@ -35,13 +35,25 @@ jobs:
           node --check android-tablet/ui/android-ui.js
           test -s android-tablet/app/src/main/assets/www/index.html
           test -s android-tablet/app/src/main/assets/www/style.css
+      - name: Check Android responsive layout and settings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          js=Path('android-tablet/app/src/main/assets/www/android-ui.js').read_text()
+          css=Path('android-tablet/app/src/main/assets/www/android-ui.css').read_text()
+          for required in ('function generalSettings()', 'function devices()', 'function setup()', 'function saveCaptureOptions()', "document.body.classList.add('android-tablet-ui')"):
+              assert required in js, 'Missing Android setting: '+required
+          for required in ('dashboard-mode .studio-dashboard', 'max-height:620px', 'android-drawer-open', 'overflow:visible!important'):
+              assert required in css, 'Missing responsive override: '+required
+          print('Android settings and landscape layout verification passed')
+          PY
       - name: Build APK for device testing
         working-directory: android-tablet
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload APK (TEST ONLY)
         uses: actions/upload-artifact@v4
         with:
-          name: KACA-ID-Android-Tablet-0.9.90-beta-APK
+          name: KACA-ID-Android-Tablet-0.9.91-beta-APK
           path: android-tablet/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

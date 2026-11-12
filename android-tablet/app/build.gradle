@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
  namespace 'id.kaca.tablet'
  compileSdk 35
- defaultConfig { applicationId 'id.kaca.tablet'; minSdk 33; targetSdk 35; versionCode 90; versionName '0.9.90-beta' }
+ defaultConfig { applicationId 'id.kaca.tablet'; minSdk 33; targetSdk 35; versionCode 91; versionName '0.9.91-beta' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
