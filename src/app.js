@@ -345,9 +345,11 @@ function mountGeneralSettingsSubmenus(onCameraOpen){
 
 async function renderGeneralSettings(){
  const pageGeneration=navigationGeneration;
+ // Never leave the settings screen blank when camera discovery or Drive OAuth hangs.
+ const bounded=(path,fallback)=>Promise.race([api(path).catch(()=>fallback),new Promise(resolve=>setTimeout(()=>resolve(fallback),2800))]);
  const [driveState,cameras]=await Promise.all([
-  api('/api/google-drive/status').catch(()=>({configured:false,connected:false,jobs:[]})),
-  api('/api/cameras').catch(()=>({cameras:[],scan_done:false}))
+  bounded('/api/google-drive/status',{configured:false,connected:false,jobs:[]}),
+  bounded('/api/cameras',{cameras:[],scan_done:false})
  ]);
  if(pageGeneration!==navigationGeneration)return;
  // Do not block the settings screen while Windows enumerates cameras. The explicit
@@ -1217,7 +1219,7 @@ const angleSwitch=angleSwitchEl;const syncAngleSwitch=()=>{const angle=Number(se
  };
  const maybeStartAutoPrint=async(st)=>{
    if(!settings.autoPrintEnabled||resultAutoPrintSent||resultAutoPrintBusy||resultLeaving)return;
-   if(!st.still_ready|| (settings.driveQrEnabled&& !st.drive_url))return;
+   if(!st.still_ready|| (settings.driveQrEnabled&& (!st.drive_url||!st.print_qr_ready)))return;
    if(resultAutoPrintAttempts>=12)return;
    resultAutoPrintBusy=true;resultAutoPrintAttempts++;
    const notice=$cap('#shareNotice');
@@ -1358,7 +1360,7 @@ if(qrImage&&!qrImage.dataset.qrLoaded){if(!qrImage.dataset.qrRequest||qrImage.da
 if(qrOpen){qrOpen.hidden=!st.drive_url;if(st.drive_url)qrOpen.href=st.drive_url;}
 if(qrStatus&&!qrImage?.dataset.qrLoaded&&!st.drive_url){qrStatus.textContent=st.drive_folder_status==='creating'?'Sedang membuat folder Google Drive; QR lokal sedang diperiksa…':st.drive_folder_status==='waiting_auth'?'QR lokal sedang diperiksa. Hubungkan Google Drive untuk membuat tautan yang dapat dipindai.':(st.drive_qr_error||st.drive_error||'Memeriksa QR lokal sesi…');}
 const statusEl=$cap('#resultRenderStatus');if(st.render_status==='error'){if(statusEl)statusEl.textContent='Render hasil foto/Live Photo gagal: '+(st.render_error||'kesalahan tidak diketahui');}else{if(st.local_archive_status==='error'){if(statusEl)statusEl.textContent='Preview siap, tetapi penyimpanan arsip lokal gagal: '+(st.local_archive_error||'periksa izin folder penyimpanan');}else if(st.local_archive_status==='ready'){if(st.drive_status==='ready'&&st.drive_url){if(statusEl)statusEl.textContent='Hasil tersimpan lokal dan Google Drive.';}else if(statusEl)statusEl.textContent='Hasil tersimpan di lokal. Upload Google Drive berjalan di latar belakang.';}else if(statusEl)statusEl.textContent='Memproses dan menyimpan hasil sesi…';}
-const img=$cap('#resultFrameImage');if(img&&st.still_ready&&!img.dataset.resultLoaded){img.onload=()=>hideFlowSlideLoading();img.onerror=()=>hideFlowSlideLoading();img.src=`${base}/output.jpg?v=${Date.now()}`;img.dataset.resultLoaded='1';}
+const img=$cap('#resultFrameImage');if(st.print_qr_ready&&img&&img.dataset.printQrReady!=='1'){img.dataset.printQrReady='1';img.dataset.resultLoaded='1';img.src=`${base}/output-print-qr.jpg?stamp=${Date.now()}`;const note=$cap('#shareNotice');if(note)note.textContent='QR Google Drive sudah disisipkan dalam JPG cetak sesuai posisi Frame & Layout.';}if(img&&st.still_ready&&!img.dataset.resultLoaded){img.onload=()=>hideFlowSlideLoading();img.onerror=()=>hideFlowSlideLoading();img.src=`${base}/output.jpg?v=${Date.now()}`;img.dataset.resultLoaded='1';}
 const livePlaceholderImage=$cap('#resultLivePlaceholder');if(livePlaceholderImage&&st.still_ready&&!livePlaceholderImage.dataset.resultLoaded){livePlaceholderImage.src=`${base}/output.jpg?v=${Date.now()}`;livePlaceholderImage.dataset.resultLoaded='1';}
 // v0.9.66: media-state orchestration, independent of QR/Drive and backend flags.
 if(st.live_photo_enabled && (st.live_output_available || st.live_output_preview_available || st.live_output)){
@@ -1433,7 +1435,7 @@ async function renderFrames(){
  <div class="panel" style="margin-top:14px"><h3>Buat Frame PNG dari Awal</h3><p class="muted">Buat desain dasar dengan warna, judul, dan footer. Aplikasi akan membuat lubang transparan sesuai posisi slot foto di bawah.</p><div class="form-grid"><div class="field"><label>Warna dasar frame</label><input id="frameBgColor" type="color" value="#171717"></div><div class="field"><label>Warna aksen / garis</label><input id="frameAccentColor" type="color" value="#d8b56a"></div><div class="field"><label>Judul frame</label><input id="frameTitle" value="KACA.ID"></div><div class="field"><label>Teks bawah</label><input id="frameFooter" value="SAY CHEESE, SAY KACA"></div></div><button class="btn secondary" id="createFramePng">Buat & Simpan Frame PNG</button></div>
  <div class="actions wrap"><button class="btn secondary" id="addSlot">+ Tambah Slot Foto</button><button class="btn secondary" id="duplicateSlot">Duplikasi Slot Terakhir (Foto Sama)</button><button class="btn secondary" id="removeSlot">− Hapus Slot Terakhir</button><button class="btn secondary" id="resetSlots">Susun Otomatis</button></div>
  <div class="field" style="max-width:260px;margin-top:12px"><label>Jumlah foto dalam frame (manual)</label><input id="slotCount" type="number" min="1" max="8" value="${slots.length}"><small class="field-help">Atur jumlah langsung atau gunakan tombol tambah/hapus slot.</small></div>
- <div class="panel" style="margin-top:14px"><h3>QR Google Drive di Dalam Frame</h3><label class="frame-enable-check"><input id="driveQrEnabled" type="checkbox" ${qrEnabled?'checked':''}><span>Sisipkan QR Google Drive ke hasil JPG untuk dicetak</span></label><p class="muted">QR menggunakan tautan folder Google Drive sesi. Seret kotak QR pada pratinjau untuk mengatur posisi dan gunakan pegangan sudut untuk mengubah ukuran. QR baru dirender setelah tautan folder sesi tersedia.</p></div><div class="layout-editor-preview" id="layoutEditorPreview"><img id="framePreviewImage" alt="Frame PNG terpilih" hidden><div id="slotPreviewLayer"></div></div><div id="slotSourceControls" class="slot-source-controls"></div>
+ <div class="panel" style="margin-top:14px"><h3>QR Google Drive di Dalam Frame</h3><label class="frame-enable-check"><input id="driveQrEnabled" type="checkbox" ${qrEnabled?'checked':''}><span>Sisipkan QR Google Drive ke hasil JPG untuk dicetak</span></label><p class="muted">QR menggunakan tautan folder Google Drive sesi. Seret kotak QR pada pratinjau untuk mengatur posisi dan gunakan pegangan sudut untuk mengubah ukuran. QR baru dirender setelah tautan folder sesi tersedia. Saat siap, preview hasil akan menampilkan JPG cetak ber-QR dan hasil cetak memakai file tersebut.</p></div><div class="layout-editor-preview" id="layoutEditorPreview"><img id="framePreviewImage" alt="Frame PNG terpilih" hidden><div id="slotPreviewLayer"></div></div><div id="slotSourceControls" class="slot-source-controls"></div>
  <div class="notice">Atur slot langsung pada pratinjau: seret kotak bernomor untuk memindahkan, lalu seret pegangan di sudut kanan bawah untuk mengubah ukurannya. Perubahan tersimpan saat menekan Simpan Frame & Layout.</div>
  <div class="actions"><button class="btn" id="saveLayout">Simpan Frame & Layout</button></div><div id="layoutStatus" class="notice">Layout akan dipakai pada sesi pemotretan berikutnya.</div></div>`;
  const preview=$('#layoutEditorPreview'),frameImg=$('#framePreviewImage'),layer=$('#slotPreviewLayer');
@@ -1680,6 +1682,7 @@ function kacaShowMenuRecovery(page,reason){
  panel.innerHTML=`<h3>Menu ${esc(titles[page]||page)} belum tampil lengkap</h3><p>${esc(reason)}</p><p class="muted">Aplikasi telah mencoba memuat ulang beberapa kali. Anda dapat mencoba lagi tanpa menutup KACA.ID.</p><div class="actions"><button type="button" class="btn" id="kacaIntegrityRetry">Coba Muat Ulang</button><button type="button" class="btn secondary" id="kacaIntegrityDashboard">Dashboard</button></div>`;
  panel.querySelector('#kacaIntegrityRetry').onclick=()=>void go(page);
  panel.querySelector('#kacaIntegrityDashboard').onclick=()=>void go('dashboard');
+  const reload=document.createElement('button');reload.type='button';reload.className='btn secondary';reload.textContent='Reload Tampilan Penuh';reload.onclick=()=>{if(!document.body.classList.contains('photo-session-mode')&&confirm('Muat ulang antarmuka KACA.ID? Data tersimpan tetap aman. Jangan lakukan saat sesi foto berjalan.'))window.location.reload();};panel.querySelector('.actions').append(reload);
 }
 function kacaWatchMenu(page,request,autoRecovered){
  if(kacaMenuWatchTimer){clearInterval(kacaMenuWatchTimer);kacaMenuWatchTimer=null;}
@@ -1746,7 +1749,7 @@ async function recoverKacaMenu(){
  if(typeof closeKacaKeyboard==='function')closeKacaKeyboard();
  const current=window.kacaCurrentMenu||'dashboard';
  const destination=current==='capture'||current==='videoCapture'?'dashboard':current;
- try{await go(destination);}
+ try{let ok=await go(destination);if(!ok&&destination==='generalSettings'){window.kacaGeneralSettingsTab='storage';ok=await go(destination,{autoRecovered:true});}if(!ok)kacaShowMenuRecovery(destination,'Percobaan pemulihan gagal. Gunakan Reload Tampilan Penuh untuk memuat ulang antarmuka.');}
  catch(err){console.error('[KACA_MENU_RECOVER]',err);const body=$('#content');if(body)body.innerHTML=`<div class="panel menu-error-state"><h3>Menu belum pulih</h3><p>${esc(err.message||String(err))}</p><button class="btn" id="fallbackDashboard">Buka Dashboard</button></div>`;if($('#fallbackDashboard'))$('#fallbackDashboard').onclick=()=>go('dashboard');}
 }
 const recoveryButton=document.getElementById('kacaRecoverMenu');
