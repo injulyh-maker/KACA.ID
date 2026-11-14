@@ -124,3 +124,65 @@ html body.android-tablet-ui.dashboard-mode .dash-gallery-section{overflow-x:auto
 html body.android-tablet-ui.dashboard-mode .dash-gallery-track{display:flex!important;gap:8px!important;width:max-content!important;min-width:100%!important;height:100%!important;animation:none!important;align-items:stretch!important}
 html body.android-tablet-ui.dashboard-mode .dash-gallery-track .android-gallery-card{display:block!important;height:100%!important;width:auto!important;min-width:clamp(130px,24vw,260px)!important;max-width:72vw!important;object-fit:cover!important;border-radius:11px;flex:0 0 auto;scroll-snap-align:start}
 body.android-tablet-ui .android-gallery-manage img,body.android-tablet-ui .android-gallery-card{user-select:none;-webkit-user-select:none}
+
+
+/* KACA.ID Android 0.9.92: one guaranteed scroll owner for long operator settings.
+   Windows uses fixed desktop panels; on Android the main surface scrolls, while
+   the sidebar scrolls independently and the tabs stay reachable in landscape. */
+html body.android-tablet-ui{height:100%!important;max-height:100dvh!important;min-height:0!important;overflow:hidden!important}
+html body.android-tablet-ui .app{height:100dvh!important;min-height:0!important;max-height:100dvh!important;overflow:hidden!important;align-items:stretch!important}
+html body.android-tablet-ui .main{
+  height:100dvh!important;min-height:0!important;max-height:100dvh!important;
+  overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y!important;padding-bottom:calc(70px + env(safe-area-inset-bottom))!important;
+}
+html body.android-tablet-ui .sidebar{height:100dvh!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior-y:contain}
+html body.android-tablet-ui #content,
+html body.android-tablet-ui .android-settings,
+html body.android-tablet-ui .panel,
+html body.android-tablet-ui .android-settings-section,
+html body.android-tablet-ui .android-settings-pane{
+  height:auto!important;min-height:0!important;max-height:none!important;
+  overflow:visible!important;overflow-wrap:anywhere!important;
+}
+html body.android-tablet-ui.dashboard-mode .main{height:100dvh!important;min-height:0!important;overflow-y:auto!important;padding-bottom:env(safe-area-inset-bottom)!important}
+html body.android-tablet-ui .android-settings-intro{padding:clamp(12px,2vw,24px) 3px 7px}
+html body.android-tablet-ui .android-settings-intro h3{font-size:clamp(20px,2.8vw,29px);margin:4px 0}
+html body.android-tablet-ui .android-settings-tabs{
+ display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto!important;overflow-y:hidden!important;
+ position:sticky;top:0;z-index:35;padding:10px 5px 12px;
+ background:#101114;box-shadow:0 5px 16px #060710aa;
+ border-bottom:1px solid #3b3c45;scrollbar-width:thin;-webkit-overflow-scrolling:touch
+}
+html body.android-tablet-ui .android-settings-tab{
+ border:1px solid #454653;border-radius:12px;background:#202127;color:#dad8e6;
+ padding:10px 14px;white-space:nowrap;flex:0 0 auto;font-size:clamp(12px,1.5vw,15px);
+ min-height:42px;cursor:pointer
+}
+html body.android-tablet-ui .android-settings-tab.active{color:#fff;border-color:#bc4b3a;background:#803a30}
+html body.android-tablet-ui .android-settings-pane{
+ display:block!important;padding:clamp(12px,2.4vw,24px)!important;
+ background:#151517;border:1px solid #393940;border-radius:14px;margin:12px 0 20px
+}
+html body.android-tablet-ui .android-settings-pane[hidden]{display:none!important}
+html body.android-tablet-ui .android-settings-pane h3{font-size:clamp(18px,2.5vw,25px);margin:0 0 12px}
+html body.android-tablet-ui .android-device-report{
+ margin:12px 0;padding:12px 14px;min-width:0;max-width:100%;
+ border:1px solid #404859;background:#121825;border-radius:12px;color:#cdd5e8;
+ line-height:1.55;overflow-wrap:anywhere
+}
+html body.android-tablet-ui .android-device-report small{display:block;color:#abbcd5;font-size:12px;margin-top:4px}
+html body.android-tablet-ui .android-device-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:9px 0}
+html body.android-tablet-ui .android-device-grid>section{background:#1b2232;border:1px solid #343e52;border-radius:10px;padding:12px;min-width:0}
+html body.android-tablet-ui .android-device-row{margin:9px 0;padding:10px;border:1px solid #394157;border-radius:9px;overflow-wrap:anywhere}
+html body.android-tablet-ui .android-device-row small{display:block;margin-top:3px}
+html body.android-tablet-ui .form-grid>*{max-width:100%;min-width:0}
+html body.android-tablet-ui .android-action-row{display:flex;flex-wrap:wrap!important;align-items:stretch;max-width:100%;min-width:0;gap:9px}
+html body.android-tablet-ui .android-action-row .btn{min-width:0;max-width:100%;white-space:normal;word-break:break-word}
+@media(max-width:700px){html body.android-tablet-ui .android-device-grid{grid-template-columns:minmax(0,1fr)!important}}
+@media(orientation:landscape) and (max-height:600px){
+ html body.android-tablet-ui .android-settings-tabs{padding:5px 4px 7px}
+ html body.android-tablet-ui .android-settings-tab{min-height:35px;padding:6px 10px}
+ html body.android-tablet-ui .android-settings-pane{padding:10px!important;margin-top:8px}
+ html body.android-tablet-ui .main{padding-bottom:calc(55px + env(safe-area-inset-bottom))!important}
+}
