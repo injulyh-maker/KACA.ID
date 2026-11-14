@@ -169,6 +169,53 @@ public final class TabletActivity extends MainActivity {
             else pending.deny();
         }
     }
+
+    /**
+     * Discovery only: Camera2 device identities and USB host class interfaces.
+     * PTP recognition does NOT imply Canon/Nikon remote shutter/live view support.
+     */
+    private JSONObject scanCameraHardware(){
+        JSONObject result=new JSONObject();
+        try{
+            org.json.JSONArray cameras=new org.json.JSONArray();
+            android.hardware.camera2.CameraManager manager=(android.hardware.camera2.CameraManager)getSystemService(CAMERA_SERVICE);
+            if(manager!=null)for(String id:manager.getCameraIdList()){
+                org.json.JSONObject obj=new org.json.JSONObject();obj.put("id",id);
+                android.hardware.camera2.CameraCharacteristics ch=manager.getCameraCharacteristics(id);
+                Integer facing=ch.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING);
+                String kind=(facing!=null&&facing==android.hardware.camera2.CameraCharacteristics.LENS_FACING_EXTERNAL)?"USB / eksternal":
+                            (facing!=null&&facing==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT)?"Depan":
+                            (facing!=null&&facing==android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK)?"Belakang":"Tidak diketahui";
+                obj.put("type",kind);cameras.put(obj);
+            }
+            result.put("cameras",cameras);
+        }catch(Exception e){try{result.put("cameraError",e.getMessage());}catch(Exception ignored){}}
+        try{
+            org.json.JSONArray devices=new org.json.JSONArray();
+            android.hardware.usb.UsbManager usb=(android.hardware.usb.UsbManager)getSystemService(USB_SERVICE);
+            if(usb!=null){
+                for(android.hardware.usb.UsbDevice d:usb.getDeviceList().values()){
+                    boolean ptp=d.getDeviceClass()==android.hardware.usb.UsbConstants.USB_CLASS_STILL_IMAGE;
+                    boolean uvc=d.getDeviceClass()==android.hardware.usb.UsbConstants.USB_CLASS_VIDEO;
+                    for(int i=0;i<d.getInterfaceCount();i++){
+                        int clazz=d.getInterface(i).getInterfaceClass();
+                        ptp|=clazz==android.hardware.usb.UsbConstants.USB_CLASS_STILL_IMAGE;
+                        uvc|=clazz==android.hardware.usb.UsbConstants.USB_CLASS_VIDEO;
+                    }
+                    if(!ptp&&!uvc)continue;
+                    org.json.JSONObject row=new org.json.JSONObject();
+                    row.put("vendorId",String.format(java.util.Locale.ROOT,"%04X",d.getVendorId()));
+                    row.put("productId",String.format(java.util.Locale.ROOT,"%04X",d.getProductId()));
+                    row.put("name",d.getProductName()==null?"Perangkat USB":d.getProductName());
+                    row.put("type",ptp?"Kamera foto PTP (terdeteksi, shutter belum didukung)":"USB Video Class (UVC)");
+                    row.put("permission",usb.hasPermission(d));devices.put(row);
+                }
+            }
+            result.put("usb",devices);
+        }catch(Exception e){try{result.put("usbError",e.getMessage());}catch(Exception ignored){}}
+        return result;
+    }
+
     @Override public void onDestroy(){
         if(webCameraRequest!=null){webCameraRequest.deny();webCameraRequest=null;}
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
@@ -201,6 +248,23 @@ public final class TabletActivity extends MainActivity {
         @JavascriptInterface public void activate(String email,String password,String code,String booth){
             if(email.length()>180||password.length()>256||code.length()>100||booth.length()>100){notice("Input terlalu panjang");return;}
             TabletActivity.this.activate(email,password,code,booth);
+        }
+
+        @JavascriptInterface public String scanDevices(){return scanCameraHardware().toString();}
+        @JavascriptInterface public String printerServices(){return AndroidPhotoPrinter.services(TabletActivity.this).toString();}
+        @JavascriptInterface public void openPrintSettings(){runOnUiThread(()->{
+            try{startActivity(new Intent("android.settings.ACTION_PRINT_SETTINGS"));}
+            catch(Exception e){notice("Pengaturan Print Service tidak ditemukan. Instal layanan cetak sesuai merek printer.");}
+        });}
+        @JavascriptInterface public void printLastPhoto(String media,String fitting){
+            runOnUiThread(()->{
+                try{
+                    if(!"4R".equals(media)&&!"2R".equals(media)&&!"2R_STRIP".equals(media))throw new IllegalArgumentException("Ukuran cetak tidak valid.");
+                    if(!"fit".equals(fitting)&&!"fill".equals(fitting))throw new IllegalArgumentException("Mode gambar tidak valid.");
+                    boolean landscape=lastResult!=null&&lastResult.getWidth()>lastResult.getHeight();
+                    AndroidPhotoPrinter.print(TabletActivity.this,lastResultUri,media,fitting,landscape);
+                }catch(Exception e){notice("Gagal membuka cetak: "+e.getMessage());}
+            });
         }
         @JavascriptInterface public void capture(){runOnUiThread(()->TabletActivity.this.capture());}
         @JavascriptInterface public void recordVideo(){runOnUiThread(()->TabletActivity.this.recordVideo());}
