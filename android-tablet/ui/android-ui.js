@@ -10,11 +10,12 @@ let page='dashboard',stream=null,lastPhoto='',framePreview='',drawer=false,galle
 settings.jpegQuality=Math.min(100,Math.max(65,Number(settings.jpegQuality)||95));
 settings.videoDuration=Math.min(180,Math.max(5,Number(settings.videoDuration)||30));
 settings.cameraFacing=['user','environment'].includes(settings.cameraFacing)?settings.cameraFacing:'user';
+settings.printPaper=['4R','2R','2R_STRIP'].includes(settings.printPaper)?settings.printPaper:'4R';settings.printFit=settings.printFit==='fill'?'fill':'fit';
 const save=()=>localStorage.setItem(settingsKey,JSON.stringify(settings));
 const titles={dashboard:'Dashboard',setup:'Setup Wizard',capture:'Capture Studio',videoCapture:'Video Studio',events:'Manajemen Event',sessionSettings:'Pengaturan Sesi',generalSettings:'Pengaturan Umum',frames:'Frame & Layout',filters:'Filter Foto',output:'Output & Cetak',archive:'Arsip Sesi',voucher:'Voucher',payment:'Pembayaran',devices:'Pengaturan Perangkat',printers:'Printer & Kertas',appearance:'Tampilan & Tema',license:'Lisensi KACA.ID',cloudControl:'Cloud Control'};
 function status(){try{return JSON.parse(native.status());}catch(e){return {active:false,message:'Android Bridge belum siap'}}}
 function badge(){const b=$('.sidebar-bottom');if(!b)return;let s=status();b.innerHTML=`<span class="status-dot"></span> ${s.active?'Lisensi lokal aktif':'Lisensi belum aktif'}<small>${esc(s.boothName||'KACA.ID Android')}</small>`;}
-function display(name,html){if(galleryTimer){clearInterval(galleryTimer);galleryTimer=null;}stopPreview();page=name;window.kacaCurrentMenu=name;document.body.classList.toggle('dashboard-mode',name==='dashboard');document.body.classList.remove('photo-session-mode');document.body.classList.toggle('android-capture-mode',name==='capture'||name==='videoCapture');$('#pageTitle').textContent=titles[name]||'KACA.ID';document.querySelectorAll('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.page===name));$('#content').innerHTML=html;document.body.classList.remove('android-drawer-open');window.scrollTo(0,0);badge();}
+function display(name,html){if(galleryTimer){clearInterval(galleryTimer);galleryTimer=null;}stopPreview();page=name;window.kacaCurrentMenu=name;document.body.classList.toggle('dashboard-mode',name==='dashboard');document.body.classList.remove('photo-session-mode');document.body.classList.toggle('android-capture-mode',name==='capture'||name==='videoCapture');$('#pageTitle').textContent=titles[name]||'KACA.ID';document.querySelectorAll('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.page===name));$('#content').innerHTML=html;document.body.classList.remove('android-drawer-open');const scroll=document.querySelector('.main');if(scroll)scroll.scrollTop=0;window.scrollTo(0,0);badge();}
 function panel(title,body){return `<div class="panel"><div class="eyebrow2">KACA.ID / ANDROID TABLET</div><h3>${title}</h3>${body}</div>`;}
 function toast(msg){let el=$('#androidMessage');if(!el){el=document.createElement('div');el.id='androidMessage';el.className='notice';el.style.marginTop='10px';$('#content').prepend(el);}el.textContent=msg;}
 function gate(){const s=status();if(s.active)return true;license();toast('Sesi terkunci: lisensi aktif diperlukan untuk sesi foto/video. '+(s.message||''));return false;}
@@ -72,17 +73,82 @@ function saveCaptureOptions(){
  if(t)settings.countdown=Number(t.value);
  save();saveNativeOptions();toast('Pengaturan disimpan pada tablet ini.');
 }
+function androidPrinterFields(){
+ const paper=settings.printPaper||'4R',fit=settings.printFit||'fit';
+ return `<div class="android-settings-section"><h4>Printer & Kertas Foto</h4><p class="muted">Printer dipilih melalui dialog Cetak Android. Tidak semua printer mendukung ukuran khusus.</p><div class="form-grid"><div class="field"><label>Ukuran kertas</label><select id="androidPaper"><option value="4R" ${paper==='4R'?'selected':''}>4R · 4 × 6 inci</option><option value="2R" ${paper==='2R'?'selected':''}>2R standar · 2,5 × 3,5 inci</option><option value="2R_STRIP" ${paper==='2R_STRIP'?'selected':''}>2R Strip · 2 × 6 inci</option></select></div><div class="field"><label>Posisi gambar</label><select id="androidPrintFit"><option value="fit" ${fit==='fit'?'selected':''}>Fit · seluruh foto terlihat</option><option value="fill" ${fit==='fill'?'selected':''}>Fill · crop tepi</option></select></div></div><div class="android-action-row"><button class="btn" id="androidPrintNow">Cetak Foto Terakhir</button><button class="btn secondary" id="androidPrinterScan">Periksa Layanan Printer</button><button class="btn secondary" id="androidPrintSettings">Pengaturan Printer Sistem</button></div><div id="androidPrinterReport" class="android-device-report" role="status">Pencetakan memerlukan Print Service yang sesuai dengan printer Anda.</div></div>`;
+}
+function bindAndroidPrinter(){
+ const q=id=>document.getElementById(id);
+ const persist=()=>{settings.printPaper=q('androidPaper').value;settings.printFit=q('androidPrintFit').value;save();};
+ q('androidPaper')?.addEventListener('change',persist);q('androidPrintFit')?.addEventListener('change',persist);
+ q('androidPrintNow')?.addEventListener('click',()=>{persist();native.printLastPhoto(settings.printPaper,settings.printFit);});
+ q('androidPrinterScan')?.addEventListener('click',()=>{
+  try{const d=JSON.parse(native.printerServices()),names=d.services||[];q('androidPrinterReport').innerHTML=`<b>${d.available?'Fitur Print Android tersedia':'Print Android tidak tersedia'}</b><p>${names.length?'Layanan cetak terpasang: '+names.map(esc).join(', '):'Belum terdeteksi layanan cetak tambahan.'}</p><small>${esc(d.note||d.error||'Printer fisik akan dicari dari dialog cetak.')}</small>`;}
+  catch(e){q('androidPrinterReport').textContent='Gagal membaca layanan cetak: '+e.message;}
+ });
+ q('androidPrintSettings')?.addEventListener('click',()=>native.openPrintSettings());
+}
+function androidHardwareFields(){
+ return `<div class="android-settings-section"><h4>Deteksi Kamera & DSLR USB</h4><p class="muted">Memeriksa kamera Camera2 dan kamera PTP/UVC yang terhubung melalui USB OTG. Pengambilan gambar DSLR via PTP belum tersedia.</p><button class="btn secondary" id="androidCameraScan">Deteksi Kamera & USB</button><div class="android-device-report" id="androidCameraReport" role="status">Tekan tombol deteksi untuk membaca perangkat yang tersambung.</div></div>`;
+}
+function scanAndroidHardware(){
+ const target=document.getElementById('androidCameraReport');if(!target)return;
+ try{
+ const d=JSON.parse(native.scanDevices());const cameras=d.cameras||[],usb=d.usb||[];
+ const rows=(items,fn)=>items.length?items.map(fn).join(''):'<p class="muted">Belum ada perangkat.</p>';
+ target.innerHTML=`<div class="android-device-grid"><section><b>Kamera Android / Camera2</b>${rows(cameras,x=>`<div class="android-device-row">${esc(x.type||'Kamera')}<small>ID ${esc(x.id)}</small></div>`)}</section><section><b>Kamera USB / DSLR PTP</b>${rows(usb,x=>`<div class="android-device-row">${esc(x.name||'USB Camera')}<small>${esc(x.type||'USB')} · ${esc(x.vendorId||'')}:${esc(x.productId||'')}</small></div>`)}</section></div><p class="muted">DSLR yang terdeteksi sebagai USB PTP belum dapat digunakan untuk Live View, shutter maupun RAW tanpa integrasi SDK/protokol vendor. Webcam UVC hanya dapat digunakan bila didukung Android Camera2.</p>`;
+ }catch(e){target.textContent='Deteksi kamera gagal: '+e.message;}
+}
+function androidPrinters(){
+ display('printers',panel('Printer & Kertas Foto',androidPrinterFields()));
+ bindAndroidPrinter();
+}
+function enhanceGeneralAndroid(){
+ const shell=document.querySelector('#content .android-settings');if(!shell)return;
+ const cards=Array.from(shell.children).filter(el=>el.classList.contains('panel'));if(cards.length<2)return;
+ const old=cards[0],cloud=cards[1];
+ const groups=Array.from(old.querySelectorAll('.android-settings-section'));
+ const action=old.querySelector('.android-action-row');
+ const mk=(type,title)=>{const pane=document.createElement('section');pane.className='android-settings-pane';pane.dataset.androidPane=type;pane.innerHTML=`<h3>${title}</h3>`;return pane;};
+ const camera=mk('camera','Kamera & Video'),session=mk('session','Sesi & Penyimpanan'),printer=mk('print','Printer & Kertas'),sharing=mk('cloud','Cloud & Akun');
+ if(groups[0])camera.append(groups[0]);
+ camera.insertAdjacentHTML('beforeend',androidHardwareFields());
+ if(groups[1])session.append(groups[1]);
+ if(action)session.append(action);
+ printer.insertAdjacentHTML('beforeend',androidPrinterFields());
+ sharing.append(cloud);
+ const tabs=document.createElement('nav');tabs.className='android-settings-tabs';tabs.setAttribute('aria-label','Kategori pengaturan');tabs.innerHTML=[['camera','Kamera & USB'],['session','Sesi'],['print','Printer & Kertas'],['cloud','Cloud & Akun']].map(([key,title])=>`<button type="button" class="android-settings-tab" data-android-tab="${key}">${title}</button>`).join('');
+ const intro=document.createElement('div');intro.className='android-settings-intro';intro.innerHTML='<div class="eyebrow2">KACA.ID / OPERATOR</div><h3>Pengaturan Umum</h3><p class="muted">Pilih kategori; seluruh form dapat digulir pada portrait dan landscape.</p>';
+ shell.replaceChildren(intro,tabs,camera,session,printer,sharing);
+ const selected=settings.androidSettingsTab||'camera';
+ const choose=key=>{settings.androidSettingsTab=key;for(const pane of [camera,session,printer,sharing])pane.hidden=pane.dataset.androidPane!==key;tabs.querySelectorAll('button').forEach(btn=>{btn.classList.toggle('active',btn.dataset.androidTab===key);btn.setAttribute('aria-selected',String(btn.dataset.androidTab===key));});const m=document.querySelector('.main');if(m)m.scrollTop=0;};
+ tabs.querySelectorAll('button').forEach(b=>b.onclick=()=>choose(b.dataset.androidTab));
+ choose(['camera','session','print','cloud'].includes(selected)?selected:'camera');
+ document.getElementById('androidCameraScan')?.addEventListener('click',scanAndroidHardware);
+ bindAndroidPrinter();
+}
+function enhanceNativeDevices(){
+ const content=document.getElementById('content');if(!content)return;
+ content.querySelector('.panel')?.insertAdjacentHTML('beforeend',androidHardwareFields());
+ document.getElementById('androidCameraScan')?.addEventListener('click',scanAndroidHardware);
+ scanAndroidHardware();
+}
+function enhanceNativeOutput(){
+ const content=document.getElementById('content');if(!content)return;
+ content.querySelector('.panel')?.insertAdjacentHTML('beforeend',androidPrinterFields());
+ bindAndroidPrinter();
+}
 function generalSettings(){
  display('generalSettings',`<div class="android-settings"><div class="panel"><div class="eyebrow2">KACA.ID / ANDROID TABLET</div><h3>Pengaturan Umum</h3><p class="muted">Pengaturan disusun seperti Windows, tetapi hanya fungsi Android yang tersedia yang bisa diubah.</p><div class="android-settings-section"><h4>Kamera & Video</h4><div class="form-grid">${cameraFields()}${qualityFields()}</div></div><div class="android-settings-section"><h4>Sesi & Penyimpanan</h4><div class="form-grid"><div class="field"><label for="defaultCountdown">Countdown standar</label><select id="defaultCountdown">${[0,3,5,10].map(n=>`<option value="${n}" ${Number(settings.countdown)===n?'selected':''}>${n===0?'Tanpa countdown':n+' detik'}</option>`).join('')}</select></div><div class="field"><label>Lokasi hasil</label><div class="android-readonly">Pictures/KACA-ID · Movies/KACA-ID</div><small>Dikelola Android MediaStore, belum dapat diubah.</small></div></div></div><div class="android-action-row"><button class="btn" id="saveGeneral">Simpan Pengaturan</button><button class="btn secondary" id="goSessionSettings">Pengaturan Sesi</button><button class="btn secondary" id="goTheme">Tampilan & Tema</button></div></div><div class="panel"><h3>Cloud, Lisensi & Berbagi</h3><p class="muted">Sinkronisasi Cloud mengirim metadata sesi; foto asli tetap di tablet. WhatsApp Fonnte, unggah Drive otomatis, dan cetak desktop belum tersedia pada Android.</p><div class="android-action-row"><button class="btn secondary" id="goCloud">Cloud Control</button><button class="btn secondary" id="goLic">Lisensi KACA.ID</button></div></div></div>`);
- $('#saveGeneral').onclick=saveCaptureOptions;$('#goSessionSettings').onclick=sessionSettings;$('#goTheme').onclick=appearance;$('#goCloud').onclick=cloudControl;$('#goLic').onclick=license;
+ $('#saveGeneral').onclick=saveCaptureOptions;$('#goSessionSettings').onclick=sessionSettings;$('#goTheme').onclick=appearance;$('#goCloud').onclick=cloudControl;$('#goLic').onclick=license;enhanceGeneralAndroid();
 }
 function devices(){
  display('devices',panel('Perangkat & Kamera',`<p class="muted">Pengaturan kamera preview tablet. Saat foto diambil, aplikasi kamera perangkat dapat menggunakan kamera pilihannya sendiri.</p><div class="form-grid">${cameraFields()}</div><div class="android-action-row"><button class="btn" id="saveCamera">Simpan Kamera Preview</button><button class="btn secondary" id="testCamera">Uji Capture Studio</button></div><div class="android-note">DSLR Canon, pengaturan ISO profesional dan driver printer Windows belum tersedia di Android.</div>`));
- $('#saveCamera').onclick=saveCaptureOptions;$('#testCamera').onclick=()=>capture();
+ $('#saveCamera').onclick=saveCaptureOptions;$('#testCamera').onclick=()=>capture();enhanceNativeDevices();
 }
 function outputSettings(){
  display('output',panel('Hasil Foto & Cetak',`<p class="muted">Foto disimpan melalui galeri Android. Kualitas JPEG diterapkan mulai sesi berikutnya.</p><div class="form-grid">${qualityFields()}</div><div class="android-action-row"><button class="btn" id="saveOutput">Simpan Kualitas</button><button class="btn secondary" id="openResults">Buka Arsip</button></div><div class="android-note">Cetak printer Windows, QR Google Drive dalam frame dan rendering Live Photo WEBM belum tersedia di APK Android.</div>`));
- $('#saveOutput').onclick=saveCaptureOptions;$('#openResults').onclick=archive;
+ $('#saveOutput').onclick=saveCaptureOptions;$('#openResults').onclick=archive;enhanceNativeOutput();
 }
 function setup(){
  const st=status();
@@ -90,12 +156,12 @@ function setup(){
  $('#setupLicense').onclick=license;$('#setupFrame').onclick=frames;$('#setupCamera').onclick=generalSettings;$('#setupSession').onclick=sessionSettings;
 }
 function generic(name){const descriptions={events:'Pengaturan event Windows memerlukan penyimpanan event yang terpisah; porting lengkap masih berjalan.',filters:'Filter live OpenCV Windows belum dibawa ke Android; foto Android tersimpan tanpa filter desktop.',output:'File hasil disimpan di galeri tablet. Fitur printer Windows belum didukung.',printers:'Printer driver Windows dan Canon EDSDK tidak dapat dijalankan sebagai driver Android.',devices:'Kamera tablet dapat dipakai. Kamera DSLR membutuhkan SDK Android dari vendor perangkat.',voucher:'Voucher Cloud dan diskon perangkat belum selesai dipindahkan ke Android.',payment:'Konfigurasi QRIS belum terintegrasi ke Android beta.',generalSettings:'Pengaturan kamera dan kualitas desktop menggunakan backend Python; port Android sedang dikembangkan.',setup:'Upload frame, aktifkan lisensi, lalu mulai PHOTO melalui menu Capture Studio.'};display(name,panel(esc(titles[name]||name),`<div class="android-note">${esc(descriptions[name]||'Fitur Android ini masih dalam pengembangan.')} Tidak ada fitur simulasi yang dianggap sebagai proses berhasil.</div><div class="android-action-row"><button class="btn" id="goFrames">Frame & Layout</button><button class="btn secondary" id="goLicense">Lisensi</button></div>`));$('#goFrames').onclick=frames;$('#goLicense').onclick=license;}
-function go(p){switch(p){case 'dashboard':return dashboard();case 'license':return license();case 'cloudControl':return cloudControl();case 'capture':return capture();case 'videoCapture':return capture(true);case 'frames':return frames();case 'appearance':return appearance();case 'sessionSettings':return sessionSettings();case 'generalSettings':return generalSettings();case 'devices':return devices();case 'setup':return setup();case 'output':return outputSettings();case 'archive':return archive();default:return generic(p);}}
-window.kacaAndroid={notice:toast,statusChanged:()=>badge(),onActivation:(ok,msg)=>{const b=$('#licenseActivate');if(b)b.disabled=false;toast(msg);badge();},onPhotoReady:(base64)=>{lastPhoto='data:image/jpeg;base64,'+base64;stopPreview();display('output',panel('Hasil Sesi Foto',`<div class="android-result"><div><h3>Foto dalam Frame</h3><img src="${lastPhoto}" alt="Hasil foto dalam frame"></div><div><h3>Hasil Sesi</h3><div class="android-note">Foto telah disimpan di Pictures/KACA-ID. Live Photo dan QR Google Drive pada tablet belum tersedia.</div></div></div><div class="android-action-row"><button class="btn" id="again">Foto Lagi</button><button class="btn secondary" id="share">Bagikan</button><button class="btn secondary" id="home">Dashboard</button></div>`));$('#again').onclick=()=>capture();$('#share').onclick=()=>native.shareLastPhoto();$('#home').onclick=dashboard;}};
+function go(p){switch(p){case 'printers':return androidPrinters();case 'dashboard':return dashboard();case 'license':return license();case 'cloudControl':return cloudControl();case 'capture':return capture();case 'videoCapture':return capture(true);case 'frames':return frames();case 'appearance':return appearance();case 'sessionSettings':return sessionSettings();case 'generalSettings':return generalSettings();case 'devices':return devices();case 'setup':return setup();case 'output':return outputSettings();case 'archive':return archive();default:return generic(p);}}
+window.kacaAndroid={notice:toast,statusChanged:()=>badge(),onActivation:(ok,msg)=>{const b=$('#licenseActivate');if(b)b.disabled=false;toast(msg);badge();},onPhotoReady:(base64)=>{lastPhoto='data:image/jpeg;base64,'+base64;stopPreview();display('output',panel('Hasil Sesi Foto',`<div class="android-result"><div><h3>Foto dalam Frame</h3><img src="${lastPhoto}" alt="Hasil foto dalam frame"></div><div><h3>Hasil Sesi</h3><div class="android-note">Foto telah disimpan di Pictures/KACA-ID. Live Photo dan QR Google Drive pada tablet belum tersedia.</div></div></div><div class="android-action-row"><button class="btn" id="again">Foto Lagi</button><button class="btn secondary" id="share">Bagikan</button><button class="btn secondary" id="home">Dashboard</button></div>`));$('#again').onclick=()=>capture();$('#share').onclick=()=>native.shareLastPhoto();$('#home').onclick=dashboard;const actions=$('#content .android-action-row');if(actions){actions.insertAdjacentHTML('afterbegin',`<button class="btn" id="androidQuickPrint4R">Cetak 4R</button><button class="btn secondary" id="androidQuickPrint2R">Cetak 2R</button><button class="btn secondary" id="androidQuickPrintStrip">Cetak 2R Strip</button>`);$('#androidQuickPrint4R').onclick=()=>native.printLastPhoto('4R',settings.printFit);$('#androidQuickPrint2R').onclick=()=>native.printLastPhoto('2R',settings.printFit);$('#androidQuickPrintStrip').onclick=()=>native.printLastPhoto('2R_STRIP',settings.printFit);}}};
 document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
 let drawerBtn=document.createElement('button');drawerBtn.id='androidDrawerToggle';drawerBtn.textContent='☰ Menu';drawerBtn.onclick=()=>document.body.classList.toggle('android-drawer-open');document.body.appendChild(drawerBtn);
 $('#kacaRecoverMenu')?.addEventListener('click',dashboard);
 $('#fullscreenToggle')?.addEventListener('click',()=>native.toggleFullscreen());
-$('#version').textContent='v0.9.91 Android shared UI beta';
+$('#version').textContent='v0.9.92 Android responsive beta';
 document.body.classList.add('android-tablet-ui');document.body.classList.remove('kaca-booting');dashboard();
 })();
