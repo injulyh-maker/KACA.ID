@@ -51,7 +51,7 @@ jobs:
               assert required in js, 'Missing native Android UI: '+required
           for required in ('scanDevices()', 'printerServices()', 'printLastPhoto(String media,String fitting)', 'USB_CLASS_STILL_IMAGE', 'USB_CLASS_VIDEO'):
               assert required in java, 'Missing Android hardware bridge: '+required
-          for required in ('PrintManager', 'PrintDocumentAdapter', 'PdfDocument', '"4R"', '"2R"', '"2R_STRIP"'):
+          for required in ('PrintManager', 'PrintDocumentAdapter', 'PdfDocument', '"KACA_4R"', '"2R"', '"2R_STRIP"'):
               assert required in printer, 'Missing Print Framework support: '+required
           print('Responsive settings, USB discovery, 4R/2R PDF print, audio controls verified')
           PY
