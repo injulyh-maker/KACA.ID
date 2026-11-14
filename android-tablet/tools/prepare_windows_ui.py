@@ -21,7 +21,7 @@ html=html.replace('<script src="app.js"></script>','<script src="android-ui.js">
 if '<script src="android-ui.js"></script>' not in html:raise SystemExit('Unexpected Windows HTML: no app.js script entry')
 html=html.replace('</head>','<link rel="stylesheet" href="android-ui.css"></head>',1)
 # WebView only serves trusted bundled files, no remote scripts/iframes and no file URL access.
-html=html.replace('<head>','<head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data: blob:; media-src \'self\' blob:; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'self\';">',1)
+html=html.replace('<head>','<head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data: blob:; media-src \'self\' blob: data:; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'self\';">',1)
 (out/'index.html').write_text(html,encoding='utf-8')
 shutil.copy2(web/'style.css',out/'style.css')
 shutil.copy2(repo/'android-tablet/ui/android-ui.js',out/'android-ui.js')

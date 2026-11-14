@@ -43,9 +43,17 @@ jobs:
           css=Path('android-tablet/app/src/main/assets/www/android-ui.css').read_text()
           for required in ('function generalSettings()', 'function devices()', 'function setup()', 'function saveCaptureOptions()', "document.body.classList.add('android-tablet-ui')"):
               assert required in js, 'Missing Android setting: '+required
-          for required in ('dashboard-mode .studio-dashboard', 'max-height:620px', 'android-drawer-open', 'overflow:visible!important'):
+          for required in ('dashboard-mode .studio-dashboard', 'max-height:620px', 'android-drawer-open', 'overflow:visible!important', 'overflow-y:auto!important', 'android-settings-tabs', 'android-settings-pane[hidden]'):
               assert required in css, 'Missing responsive override: '+required
-          print('Android settings and landscape layout verification passed')
+          java=Path('android-tablet/app/src/main/java/id/kaca/tablet/TabletActivity.java').read_text()
+          printer=Path('android-tablet/app/src/main/java/id/kaca/tablet/AndroidPhotoPrinter.java').read_text()
+          for required in ('enhanceGeneralAndroid()', 'function androidPrinters()', 'function scanAndroidHardware()', 'native.printLastPhoto', 'androidPlayAudio', 'android-settings-tab'):
+              assert required in js, 'Missing native Android UI: '+required
+          for required in ('scanDevices()', 'printerServices()', 'printLastPhoto(String media,String fitting)', 'USB_CLASS_STILL_IMAGE', 'USB_CLASS_VIDEO'):
+              assert required in java, 'Missing Android hardware bridge: '+required
+          for required in ('PrintManager', 'PrintDocumentAdapter', 'PdfDocument', '"4R"', '"2R"', '"2R_STRIP"'):
+              assert required in printer, 'Missing Print Framework support: '+required
+          print('Responsive settings, USB discovery, 4R/2R PDF print, audio controls verified')
           PY
       - name: Build APK for device testing
         working-directory: android-tablet
