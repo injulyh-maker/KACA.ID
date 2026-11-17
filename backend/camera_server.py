@@ -224,6 +224,28 @@ whatsapp_cloud = WhatsAppCloudManager(DATA_DIR)
 doku_qris = DokuQris(DATA_DIR)
 midtrans_snap = MidtransSnap(DATA_DIR)
 fonnte_gateway = FonnteGateway(DATA_DIR)
+
+MEDIA_STORAGE_POLICY_PATH = os.path.join(DATA_DIR, 'media-storage-policy.json')
+try:
+    with open(MEDIA_STORAGE_POLICY_PATH,encoding='utf-8') as _pf:
+        media_storage_policy=json.load(_pf)
+    if media_storage_policy.get('mode') not in ('local','drive','web','both'):
+        media_storage_policy={'mode':'drive','share':'drive'}
+except (OSError,ValueError,TypeError):
+    media_storage_policy={'mode':'drive','share':'drive'}
+
+def _drive_upload_enabled():
+    return media_storage_policy.get('mode','drive') in ('drive','both')
+
+def _preferred_share_url(obj):
+    return str((obj.get('web_url') if media_storage_policy.get('share')=='web' else obj.get('drive_url')) or '')
+
+def _persist_media_policy():
+    tmp=MEDIA_STORAGE_POLICY_PATH+'.tmp'
+    with open(tmp,'w',encoding='utf-8') as out:json.dump(media_storage_policy,out,indent=2)
+    os.replace(tmp,MEDIA_STORAGE_POLICY_PATH)
+
+
 DRIVE_JOBS_PATH = os.path.join(DATA_DIR, 'google-drive-jobs.json')
 WHATSAPP_JOBS_PATH = os.path.join(DATA_DIR, 'whatsapp-jobs.json')
 VOUCHERS_PATH = os.path.join(DATA_DIR, 'vouchers.json')
@@ -469,7 +491,7 @@ def enqueue_drive_job(kind, local_path, folder_name, reference_id, session_id=No
         job = {'id':job_id,'kind':kind,'local_path':os.path.abspath(local_path),'folder_name':folder_name,
                'created_at':old.get('created_at') or datetime.datetime.now().isoformat(timespec='seconds'),
                'session_id':session_id,'event_id':_event_storage_key(event_id),
-               'status':'pending' if google_drive.status().get('connected') else 'waiting_auth',
+               'status':('local_only' if not _drive_upload_enabled() else ('pending' if google_drive.status().get('connected') else 'waiting_auth')),
                'attempts':int(old.get('attempts',0) or 0),'url':(manifest or {}).get('drive_url') or old.get('url'),
                'folder_id':(manifest or {}).get('drive_folder_id') or old.get('folder_id'),
                'share_warning':(manifest or {}).get('drive_share_warning') or old.get('share_warning'), 'error':None,
@@ -491,7 +513,7 @@ def enqueue_drive_asset_job(session_id, local_path, relative_path):
             return dict(old)
         manifest = read_manifest(session_id) or {}
         connected = google_drive.status().get('connected')
-        status = 'pending' if connected and manifest.get('drive_folder_id') else ('waiting_folder' if connected else 'waiting_auth')
+        status = 'local_only' if not _drive_upload_enabled() else ('pending' if connected and manifest.get('drive_folder_id') else ('waiting_folder' if connected else 'waiting_auth'))
         job = {'id':job_id,'kind':'asset','local_path':os.path.abspath(local_path),
                'relative_path':str(relative_path).replace('\\','/'),
                'folder_name':'','session_id':session_id,'status':status,
@@ -505,10 +527,12 @@ def enqueue_drive_asset_job(session_id, local_path, relative_path):
     return dict(job)
 
 def _write_video_drive_qr(job):
-    if not job.get('url') or not job.get('local_path') or job.get('share_warning'): return job
-    qr_bytes=_session_qr_png_bytes({'drive_url':job['url']})
+    url=_preferred_share_url({'web_url':job.get('web_url'),'drive_url':job.get('url')})
+    if not url or not job.get('local_path'): return job
+    if media_storage_policy.get('share')=='drive' and job.get('share_warning'): return job
+    qr_bytes=_session_qr_png_bytes({'web_url':job.get('web_url'),'drive_url':job.get('url')})
     if not qr_bytes:return job
-    qr_path=os.path.join(os.path.dirname(job['local_path']),str(job['id'])+'_QR_Google_Drive.png')
+    qr_path=os.path.join(os.path.dirname(job['local_path']),str(job['id'])+('_QR_Web.png' if media_storage_policy.get('share')=='web' else '_QR_Google_Drive.png'))
     tmp=qr_path+'.tmp'
     with open(tmp,'wb') as f:f.write(qr_bytes)
     os.replace(tmp,qr_path)
@@ -521,6 +545,12 @@ def _google_drive_worker():
         try:
             with drive_jobs_lock: job = dict(drive_jobs.get(job_id) or {})
             if not job or job.get('status') in ('ready', 'local_only', 'expired'): continue
+            if not _drive_upload_enabled():
+                job['status']='waiting_policy'
+                with drive_jobs_lock:
+                    drive_jobs[job_id]=job
+                    _save_drive_jobs()
+                continue
             sid = job.get('session_id')
             if sid and (read_manifest(sid) or {}).get('drive_deleted_at'):
                 with drive_jobs_lock:
@@ -771,7 +801,7 @@ def _qr_matrix_to_png(matrix, target, scale=8, quiet_zone=4):
 
 def _session_qr_png_bytes(session):
     """Build PNG bytes for the session QR. The caller persists the PNG locally only."""
-    drive_url = str(session.get('drive_url') or '').strip()
+    drive_url = _preferred_share_url(session).strip()
     if not drive_url:
         return None
     try:
@@ -809,7 +839,7 @@ def _session_qr_png_bytes(session):
 
 def _write_session_qr(session):
     """Persist the session's Google Drive QR locally; never enqueue or upload it to Drive."""
-    drive_url = str(session.get('drive_url') or '').strip()
+    drive_url = _preferred_share_url(session).strip()
     sid = str(session.get('id') or session.get('session_id') or '').strip()
     if not drive_url or not sid or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', sid):
         session['drive_qr_available'] = False
@@ -3528,6 +3558,8 @@ class Handler(BaseHTTPRequestHandler):
                  'payment_method':'','amount_idr':0,'verified_paid':False,
                  'drive_url':v.get('url') or '', 'photo_count':0}
                 for v in jobs if v.get('reference_id') or v.get('id') ]})
+        if path == '/api/cloud/media-policy':
+            return self.send_json({'ok':True,**media_storage_policy})
         if path == '/api/cloud/booth-state':
             # Local-only state for Cloud Agent; prevents mid-session remote writes.
             with session_lock:
@@ -3859,7 +3891,7 @@ class Handler(BaseHTTPRequestHandler):
                 if allowed and candidate not in candidates: candidates.append(candidate)
             qr_bytes=None
             qr_path=next((candidate for candidate in candidates if os.path.isfile(candidate)),None)
-            if not qr_path and manifest.get('drive_url'):
+            if not qr_path and _preferred_share_url(manifest):
                 _write_session_qr(manifest)
                 write_manifest(manifest)
                 candidates=[]
