@@ -789,6 +789,10 @@ def _write_session_qr(session):
                 output.write(qr_bytes)
             os.replace(archive_tmp, archive_qr)
             session['drive_qr_archive_path'] = archive_qr
+        # Upload the standalone QR alongside the session's final images.
+        # This is an app-created local file; errors are retried by Drive worker.
+        if session.get('drive_folder_id') and session.get('local_archive_path') and session.get('drive_qr_archive_path'):
+            enqueue_drive_asset_job(sid, session['drive_qr_archive_path'], 'Final_Results/QR_Google_Drive.png')
         print('[GOOGLE_DRIVE_QR_SAVED_LOCAL]', sid, qr_path, flush=True)
         return qr_path
     except Exception as exc:
@@ -1019,6 +1023,52 @@ def _sync_local_session_archive(session, final=False):
                 session['drive_status'] = 'ready'
                 write_manifest(session)
     return folder
+
+def reconcile_local_drive_sessions(max_sessions=300):
+    """Re-enqueue existing local deliverables after an interrupted or disconnected Drive sync.
+
+    Never uploads zip packages, private Session_Info metadata or arbitrary paths.
+    Existing successful asset jobs are retained, and retries remain idempotent
+    because the Drive uploader updates files with matching names.
+    """
+    if not google_drive.status().get('connected'):
+        return {'sessions':0,'assets':0,'error':'Google Drive belum terhubung. Hubungkan ulang akun sebelum sinkronisasi.'}
+    sessions=0
+    assets=0
+    try:
+        session_ids=sorted(os.listdir(SESSIONS_DIR))
+    except OSError:
+        session_ids=[]
+    for sid in session_ids[-max_sessions:]:
+        if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid):continue
+        manifest=read_manifest(sid)
+        if not manifest or manifest.get('local_deleted_at') or manifest.get('drive_deleted_at'):continue
+        archive=manifest.get('local_archive_path')
+        if not archive or not os.path.isdir(archive):continue
+        sessions+=1
+        if not manifest.get('drive_folder_id') and manifest.get('drive_folder_status')!='creating':
+            manifest['drive_folder_status']='creating'
+            manifest['drive_status']='provisioning'
+            write_manifest(manifest)
+            _start_session_drive_folder_provision(sid)
+        for subfolder in ('Photos','Live_Photos','Final_Results','Video_Results'):
+            directory=os.path.join(archive,subfolder)
+            if not os.path.isdir(directory):continue
+            for name in os.listdir(directory):
+                if not re.fullmatch(r'[A-Za-z0-9_.-]{1,180}',name):continue
+                if not name.lower().endswith(('.jpg','.jpeg','.png','.mp4','.gif')):continue
+                file_path=os.path.join(directory,name)
+                if not os.path.isfile(file_path):continue
+                previous=drive_jobs.get(sid+':'+subfolder+'/'+name) or {}
+                if previous.get('status')=='ready':continue
+                enqueue_drive_asset_job(sid,file_path,subfolder+'/'+name)
+                assets+=1
+        if manifest.get('drive_url'):
+            _write_session_qr(manifest)
+            _refresh_drive_qr_output(manifest)
+            write_manifest(manifest)
+    return {'sessions':sessions,'assets':assets}
+
 
 def sync_local_session_archive(session, final=False):
     with local_archive_lock:
@@ -1269,6 +1319,14 @@ def _refresh_drive_qr_output(session):
         except (OSError,ValueError):old={}
         if os.path.isfile(dst) and os.stat(dst).st_mtime_ns >= os.stat(src).st_mtime_ns and old.get('hash')==fingerprint:
             session['print_qr_ready']=True
+            archive=session.get('local_archive_path')
+            if archive and os.path.isdir(archive):
+                target=os.path.join(archive,'Final_Results','Hasil_Frame_Dengan_QR.jpg')
+                if not os.path.isfile(target):
+                    os.makedirs(os.path.dirname(target),exist_ok=True)
+                    shutil.copy2(dst,target)
+                if session.get('drive_folder_id'):
+                    enqueue_drive_asset_job(sid,target,'Final_Results/Hasil_Frame_Dengan_QR.jpg')
             return True
         image = cv2.imread(src,cv2.IMREAD_COLOR)
         if image is None: return False
@@ -1295,7 +1353,10 @@ def _refresh_drive_qr_output(session):
             try:
                 final_dir=os.path.join(archive,'Final_Results')
                 os.makedirs(final_dir,exist_ok=True)
-                shutil.copy2(dst,os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg'))
+                qr_export=os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg')
+                shutil.copy2(dst,qr_export)
+                if session.get('drive_folder_id'):
+                    enqueue_drive_asset_job(sid,qr_export,'Final_Results/Hasil_Frame_Dengan_QR.jpg')
             except OSError as archive_exc:
                 print('[PRINT_QR_ARCHIVE_WARNING]',repr(archive_exc),flush=True)
         return True
@@ -4169,13 +4230,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/google-drive/disconnect':
             return self.send_json({'ok':True,**google_drive.disconnect()})
         if path == '/api/google-drive/retry':
+            if not google_drive.status().get('connected'):
+                return self.send_json({'ok':False,'error':'Google Drive belum terhubung. Hubungkan ulang akun di Pengaturan Umum.'},409)
             count=0
+            # Recover existing local files before pumping queued jobs.
+            backfill=reconcile_local_drive_sessions()
             with drive_jobs_lock:
                 for jid,job in drive_jobs.items():
-                    if job.get('status') in ('waiting_auth','error','pending'):
-                        job['status']='pending';job['attempts']=0;job['error']=None;drive_jobs[jid]=job;drive_jobs_queue.put(jid);count+=1
+                    if job.get('status') not in ('waiting_auth','error','pending','waiting_folder'):continue
+                    if not os.path.isfile(job.get('local_path') or ''):continue
+                    if job.get('kind')=='asset' and not (read_manifest(job.get('session_id')) or {}).get('drive_folder_id'):
+                        job['status']='waiting_folder'
+                        drive_jobs[jid]=job
+                        continue
+                    job['status']='pending';job['attempts']=0;job['error']=None
+                    drive_jobs[jid]=job
+                    drive_jobs_queue.put(jid)
+                    count+=1
                 _save_drive_jobs()
-            return self.send_json({'ok':True,'queued':count})
+            return self.send_json({'ok':True,'queued':count,'backfill':backfill})
         if path == '/api/whatsapp/config':
             try: return self.send_json({'ok':True,**whatsapp_cloud.configure(data)})
             except Exception as exc: return self.send_json({'ok':False,'error':str(exc)},400)
