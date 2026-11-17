@@ -3,7 +3,7 @@ param()
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$installer = Join-Path $root 'dist\KACA-ID-Setup-0.9.90-x64.exe'
+$installer = Join-Path $root 'dist\KACA-ID-Setup-0.9.94-x64.exe'
 $unpacked = Join-Path $root 'dist\win-unpacked'
 $python = Join-Path $unpacked 'resources\python\python.exe'
 $vc = Join-Path $unpacked 'resources\vc_redist.x64.exe'
@@ -55,7 +55,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundled Python gagal menjalankan OpenCV dalam 
 & $python -I -m py_compile $cameraServer
 if ($LASTEXITCODE -ne 0) { throw 'Backend Python gagal preflight syntax.' }
 $hash=(Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-"$hash  KACA-ID-Setup-0.9.90-x64.exe" | Set-Content -Encoding Ascii "$installer.sha256"
+"$hash  KACA-ID-Setup-0.9.94-x64.exe" | Set-Content -Encoding Ascii "$installer.sha256"
 Write-Host "[OK] Windows installer siap, $([Math]::Round($exeSize/1MB,1)) MB" -ForegroundColor Green
 Write-Host "[OK] Python 3.12, OpenCV, VC++ offline, serta manifest tersedia."
 Write-Host "[OK] SHA256: $hash"

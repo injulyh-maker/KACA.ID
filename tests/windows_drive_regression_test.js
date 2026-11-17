@@ -14,10 +14,12 @@ const backendMarkers=[
   'def _resume_folder_assets(session_id)', 'def reconcile_local_drive_sessions',
   "status = 'pending' if connected and manifest.get('drive_folder_id')",
   "return self.send_json({'ok':bool(result.get('verified')),'diagnostic':result}",
-  'Hasil_Frame_Dengan_QR.jpg', 'Final_Results/QR_Google_Drive.png',
+  'Hasil_Frame_Dengan_QR.jpg',
   'threading.Timer(delay,lambda jid=job_id: drive_jobs_queue.put(jid))'
 ];
 for(const marker of uiMarkers)assert.ok(ui.includes(marker),'Missing UI: '+marker);
 for(const marker of backendMarkers)assert.ok(backend.includes(marker),'Missing backend: '+marker);
 assert.ok(drive.includes('def diagnose(self)'));
+assert.ok(drive.includes("'qr_google_drive.png'"));
+assert.ok(backend.includes("'local_only'"));
 console.log('Drive recovery, OAuth diagnostic, QR print and upload queue contracts pass.');

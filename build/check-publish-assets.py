@@ -19,6 +19,6 @@ agent=(root/'cloud_control/agent.js').read_text('utf8')
 assert 'config.required=true;' in agent
 assert "DEFAULT_CLOUD_ORIGIN='https://kacastudio.id'" in agent
 pkg=json.loads((root/'package.json').read_text())
-assert pkg['version']=='0.9.90'
+assert pkg['version']=='0.9.94'
 assert all('dashboard-background.mp4' not in f or f.startswith('!') for f in pkg['build']['files'])
 print('[PASS] No promo video/frames, desktop license gate, offline agent, skip loading, cloud origin.')
