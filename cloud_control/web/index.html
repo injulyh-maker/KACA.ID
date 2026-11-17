@@ -27,6 +27,19 @@
 .pager-actions{display:flex;align-items:center;gap:8px}.btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
 .pager .btn{min-width:110px}.table td .btn{margin:1px}
 @media(max-width:600px){.toolbar-filters{width:100%}.toolbar-filters select,.mini-date input{min-width:0;max-width:100%}.mini-date{width:calc(50% - 6px)}.mini-date input{width:100%}.trend-day{min-width:20px}}
+
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;padding:10px 0}
+.gallery-item{border:1px solid #314b7c;background:#111d39;border-radius:15px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:9px}
+.gallery-item img{display:block;width:100%;height:185px;object-fit:contain;background:#1b2947;border-radius:9px}
+.gallery-item b{font-size:14px;word-break:break-all}.gallery-item small{color:#9cb2d6}
+.gallery-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.gallery-actions button,.gallery-actions a{font-size:12px;padding:8px 9px;border:1px solid #365589;border-radius:8px;text-decoration:none;background:#172b50;color:#eaf2ff}
+.gallery-actions .danger{background:#402331;color:#ffbbc0;border-color:#6d3348}
+.gallery-summary{display:flex;gap:18px;color:#b4c8f0;font-size:13px;padding:12px 0}
+.gallery-pref-list{display:grid;gap:12px}
+.gallery-pref-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px;border:1px solid #30496d;border-radius:12px}
+.gallery-pref-row>span{min-width:120px;font-weight:600}.gallery-pref-row select{max-width:240px}
+@media(max-width:720px){.gallery-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}}
 </style></head><body>
 <div id="auth" class="authwrap"><div class="authcard"><div class="logo" style="padding:0"><div class="brandmark"><img src="/static/logo-kaca-192.png" alt="Logo KACA.ID"></div><div><b>KACA.ID</b><small>CLOUD CONTROL</small></div></div><h1 id="authHeading">Masuk ke akun</h1><p class="muted">Kelola satu atau beberapa booth dari satu akun, dengan lisensi yang berbeda untuk setiap perangkat.</p><form id="authForm"><div id="nameField" class="field hidden"><label>Nama lengkap</label><input id="regName" autocomplete="name"></div><div class="field"><label>Email</label><input id="authEmail" type="email" required autocomplete="email"></div><div class="field"><label>Password</label><input id="authPass" type="password" required minlength="10" autocomplete="current-password"></div><button class="btn" id="authSubmit" type="submit">Masuk</button></form>
 <div style="text-align:center;margin-top:14px;display:flex;justify-content:center;flex-wrap:wrap;gap:14px">
@@ -34,11 +47,24 @@
 <button type="button" class="linkbutton" id="resendVerify">Kirim ulang verifikasi</button>
 <a href="/paket">Paket & Harga Lisensi</a></div>
 <div id="mailMessage" class="muted" role="status" aria-live="polite" style="margin-top:14px"></div><p class="muted" style="text-align:center;margin-top:22px"><span id="authSwitchLabel">Belum memiliki akun?</span> <button class="linkbutton" id="authSwitch">Daftar sekarang</button></p></div></div>
-<div id="workspace" class="app hidden"><aside class="sidebar"><div class="logo"><div class="brandmark"><img src="/static/logo-kaca-192.png" alt="Logo KACA.ID"></div><div><b>KACA.ID</b><small>CLOUD CONTROL</small></div></div><nav class="nav"><div class="navhead">WORKSPACE</div><button data-page="dashboard" class="active">▦ &nbsp; Dashboard</button><button data-page="booths">▣ &nbsp; Multi Booth</button><button data-page="sessions">▧ &nbsp; Hasil & Sesi</button><button data-page="settings">⚙ &nbsp; Harga & Pengaturan</button><button data-page="vouchers">▤ &nbsp; Voucher</button><div class="navhead">AKUN & ADMIN</div><button data-page="licenses">◈ &nbsp; Lisensi Saya</button><button data-page="remote">◉ &nbsp; Remote Booth</button><button id="adminNav" data-page="admin" class="hidden">◆ &nbsp; Super Admin</button></nav><div class="sidebar-bottom"><div><span class="dot"></span> SINKRONISASI ONLINE</div><p id="accountLabel">—</p><button class="btn alt sm" id="logout">Keluar Akun</button></div></aside>
+<div id="workspace" class="app hidden"><aside class="sidebar"><div class="logo"><div class="brandmark"><img src="/static/logo-kaca-192.png" alt="Logo KACA.ID"></div><div><b>KACA.ID</b><small>CLOUD CONTROL</small></div></div><nav class="nav"><div class="navhead">WORKSPACE</div><button data-page="dashboard" class="active">▦ &nbsp; Dashboard</button><button data-page="booths">▣ &nbsp; Multi Booth</button><button data-page="sessions">▧ &nbsp; Hasil & Sesi</button><button data-page="gallery">▤ &nbsp; Galeri Web</button><button data-page="webshare">✧ &nbsp; Penyimpanan & Branding</button><button data-page="settings">⚙ &nbsp; Harga & Pengaturan</button><button data-page="vouchers">▤ &nbsp; Voucher</button><div class="navhead">AKUN & ADMIN</div><button data-page="licenses">◈ &nbsp; Lisensi Saya</button><button data-page="remote">◉ &nbsp; Remote Booth</button><button id="adminNav" data-page="admin" class="hidden">◆ &nbsp; Super Admin</button></nav><div class="sidebar-bottom"><div><span class="dot"></span> SINKRONISASI ONLINE</div><p id="accountLabel">—</p><button class="btn alt sm" id="logout">Keluar Akun</button></div></aside>
 <main class="main"><header class="top"><div><div class="eyebrow">KACA.ID / CLOUD CONTROL</div><h1 id="pageTitle">Dashboard</h1></div><div class="top-right"><span class="pill"><span class="dot"></span><span id="boothStatus">Sinkronisasi aman</span></span><button class="btn alt sm" id="refresh">↻ Muat Ulang</button></div></header>
 <section id="dashboard" class="view active"><div class="grid"><div class="card"><div class="statlabel">Jumlah Booth</div><div id="metricBooths" class="statvalue">—</div><div class="statnote">Perangkat berlisensi</div></div><div class="card"><div class="statlabel">Total Pengunjung</div><div id="metricVisitors" class="statvalue">—</div><div class="statnote">Sesi selesai & tersinkron</div></div><div class="card"><div class="statlabel">Pendapatan Terverifikasi</div><div id="metricRevenue" class="statvalue">—</div><div class="statnote">Hanya transaksi dengan bukti berhasil</div></div><div class="card"><div class="statlabel">Estimasi Belum Terverifikasi</div><div id="metricEstimate" class="statvalue">—</div><div class="statnote">Bukan pendapatan diterima</div></div></div><div class="split section"><div class="card"><h2 class="section-title">Rekap per Booth</h2><div id="revenueBars"></div></div><div class="card"><h2 class="section-title">Status Multi Booth</h2><div id="summaryBooths"></div></div></div><div class="card section"><div class="toolbar"><div><h2 class="section-title" style="margin:0">Tren Pengunjung & Pendapatan</h2><p class="muted" style="margin:5px 0">Riwayat berdasarkan tanggal sesi yang dilaporkan booth. Pendapatan belum diverifikasi dihitung terpisah.</p></div><div class="toolbar-filters"><select aria-label="Filter booth grafik" id="trendBooth"><option value="">Semua Booth</option></select><select aria-label="Periode grafik" id="trendDays"><option value="7">7 hari</option><option value="30" selected>30 hari</option><option value="90">90 hari</option></select></div></div><div class="trend-legend"><span><i class="legend-dot"></i> Sesi selesai</span><span id="trendSummary">—</span></div><div id="trendBars" class="trend-chart" role="img" aria-label="Grafik jumlah sesi per hari"></div></div></section>
 <section id="booths" class="view"><div class="card"><h2 class="section-title">Booth yang terhubung</h2><p class="muted">Setiap booth menggunakan satu lisensi. Satu akun boleh memiliki beberapa lisensi dan beberapa booth.</p><div class="tablewrap"><table class="table"><thead><tr><th>Nama Booth</th><th>Status</th><th>Sesi</th><th>Pendapatan</th><th>Lisensi</th><th>Aksi</th></tr></thead><tbody id="boothRows"></tbody></table></div></div></section>
 <section id="sessions" class="view"><div class="card"><div class="toolbar"><h2 class="section-title" style="margin:0">Riwayat Hasil & Sesi</h2><div class="toolbar-filters"><select id="sessionBooth" aria-label="Filter booth"><option value="">Semua Booth</option></select><select id="sessionMode" aria-label="Filter mode"><option value="">PHOTO & VIDEO</option><option value="PHOTO">PHOTO</option><option value="VIDEO">VIDEO</option></select><label class="mini-date">Mulai<input type="date" id="sessionFrom" aria-label="Tanggal mulai"></label><label class="mini-date">Sampai<input type="date" id="sessionTo" aria-label="Tanggal akhir"></label><button type="button" class="btn alt sm" id="sessionExport">Unduh CSV</button></div></div><p class="muted">Hasil foto ditampilkan melalui tautan Google Drive; thumbnail hanya tersedia jika pengguna booth mengizinkan sinkronisasi foto ke cloud.</p><div class="tablewrap"><table class="table"><thead><tr><th>Preview</th><th>Tanggal/Sesi</th><th>Booth / Event</th><th>Mode</th><th>Pembayaran</th><th>Hasil Digital</th></tr></thead><tbody id="sessionRows"></tbody></table></div><div class="pager"><span id="sessionPagerLabel">Belum ada sesi</span><div class="pager-actions"><button id="sessionPrev" class="btn alt sm" type="button" disabled>← Sebelumnya</button><button id="sessionNext" class="btn alt sm" type="button" disabled>Berikutnya →</button></div></div></div></section>
+<section id="gallery" class="view">
+<div class="card"><div class="toolbar"><div><h2 class="section-title">Galeri Sesi Cloud</h2><p class="muted">Hasil yang diunggah secara opsional ke KACA.ID Web. Tautan pelanggan tidak memerlukan login, tetapi sulit ditebak dan memiliki tanggal kedaluwarsa.</p></div>
+<div class="toolbar-filters"><select id="galleryBooth"><option value="">Semua Booth</option></select><select id="galleryLimit"><option value="12">12 / halaman</option><option value="24" selected>24 / halaman</option><option value="48">48 / halaman</option></select><button class="btn alt sm" id="galleryRefresh">Muat ulang</button></div></div>
+<div class="gallery-summary"><span id="galleryCount">0 sesi</span><span id="galleryStorage">0 MB</span></div>
+<div class="gallery-grid" id="galleryGrid"><p class="muted">Pilih booth atau tunggu sinkronisasi.</p></div>
+<div class="pager"><span id="galleryPager">Halaman 1</span><div class="pager-actions"><button class="btn alt sm" id="galleryPrev">Sebelumnya</button><button class="btn alt sm" id="galleryNext">Berikutnya</button></div></div>
+</div></section>
+<section id="webshare" class="view"><div class="card"><h2 class="section-title">Tampilan Halaman Hasil Pelanggan</h2><p class="muted">Atur nama, logo, warna halaman hasil foto atau video yang dibagikan menggunakan link dan QR web. Tautan berlaku sampai masa simpan berakhir.</p>
+<form id="galleryBrandForm"><div class="fields"><label class="field">Nama studio<input id="galleryBrandTitle" maxlength="70" required placeholder="KACA Studio"></label><label class="field">Subjudul<input id="galleryBrandSubtitle" maxlength="120"></label><label class="field">Warna aksen<input id="galleryBrandAccent" type="color" value="#375edb"></label><label class="field">Masa simpan web (hari)<input id="galleryBrandRetention" type="number" min="1" max="365" value="7" required></label><label class="field">Logo PNG/JPEG (maks. 300 KB)<input id="galleryBrandLogo" type="file" accept="image/png,image/jpeg"></label></div><button class="btn" type="submit">Simpan Branding Galeri</button></form></div>
+<div class="card section"><h2 class="section-title">Penyimpanan & Metode Berbagi per Booth</h2><p class="muted">Penyimpanan lokal tetap menjadi arsip utama. Mode web mengunggah file hasil terpilih ke Cloud saat booth online; jika ingin berhenti mengunggah ke Google Drive, nonaktifkan fitur Drive di pengaturan booth juga.</p>
+<div id="galleryPreferences" class="gallery-pref-list"></div>
+<p class="muted">Mode web mengenakan kuota server maksimal 2 GB per booth. Preview JPEG maksimal 20 MB; arsip ZIP maksimal 80 MB; video MP4 maksimal 150 MB. File web otomatis tidak dapat diakses setelah tanggal kedaluwarsa.</p></div>
+</section>
 <section id="settings" class="view"><div class="card"><h2 class="section-title">Pengaturan Booth dari Web</h2><p class="muted">Perubahan akan diantrikan dan diterapkan oleh agen saat booth online. Jika sedang sesi aktif, agen menundanya hingga sesi selesai.</p><form id="settingForm"><div class="fields"><label class="field">Pilih Booth<select id="settingBooth" required></select></label><label class="field">Harga PHOTO (Rp)<input id="settingPrice" type="number" min="0" max="50000000" value="25000"></label><label class="field">Countdown (detik)<input id="settingTimer" type="number" min="1" max="30" value="3"></label><label class="field">Durasi Live Photo (detik)<input id="settingLive" type="number" min="3" max="30" value="5"></label><label class="field">Mode sesi<select id="settingMode"><option value="fixed_count">Jumlah Foto</option><option value="timed">Durasi Sesi</option></select></label><label class="field">Fitur Dashboard<select id="settingFeatures"><option value="both">PHOTO + VIDEO</option><option value="photo">PHOTO saja</option><option value="video">VIDEO saja</option></select></label></div><div class="actions"><button class="btn" type="submit">Kirim Pengaturan Booth</button></div></form><div class="section" style="border-top:1px solid #345074;padding-top:19px"><h2 class="section-title">Kontrol Kamera per Booth</h2><p class="muted">Nilai berasal dari driver kamera yang terhubung. Slider hanya dapat digunakan jika perangkat mendukung kontrol tersebut; perubahan diblokir saat sesi aktif.</p><div class="fields"><label class="field">Kamera<select id="cloudCameraAngle"><option value="0">Kamera 1</option><option value="1">Kamera 2</option></select></label><label class="field">Kontrol tersedia<select id="cloudCameraProperty"></select></label></div><div class="field" style="margin-top:15px"><label id="cloudCameraCurrent">Nilai aktual dari driver: —</label><input type="range" id="cloudCameraRange" min="0" max="100" step="1" disabled></div><div class="actions"><button class="btn alt" type="button" id="refreshCameraCaps">Perbarui Kemampuan Kamera</button><button class="btn" type="button" id="applyCameraRemote" disabled>Kirim ke Kamera</button></div><p id="cameraCapsStatus" class="muted">Pilih booth terhubung untuk memuat kemampuan driver.</p></div></div></section>
 <section id="vouchers" class="view"><div class="card"><h2 class="section-title">Buat Voucher dari Web</h2><p class="muted">Kode voucher disinkronkan ke database booth saat perangkat kembali online; bisa tetap digunakan lokal setelah sinkron.</p><form id="voucherForm"><div class="fields"><label class="field">Booth<select id="voucherBooth" required></select></label><label class="field">Kode voucher<input id="voucherCode" minlength="4" maxlength="35" placeholder="EVENT2026" required></label><label class="field">Batas penggunaan<input id="voucherUses" type="number" value="1" min="1" max="500" required></label></div><div class="actions"><button class="btn" type="submit">Buat & Kirim Voucher</button></div></form><div class="section"><h3>Riwayat perintah voucher</h3><div id="voucherHistory" class="muted">Pilih booth untuk melihat status.</div></div></div></section>
 <section id="licenses" class="view"><div class="card"><h2 class="section-title">Daftar Lisensi Akun</h2><p class="muted">Satu lisensi diaktifkan untuk satu perangkat. Satu akun dapat menyimpan dan menggunakan banyak lisensi sekaligus.</p><div class="tablewrap"><table class="table"><thead><tr><th>Kode (disamarkan)</th><th>Berlaku Hingga</th><th>Status</th><th>Booth</th></tr></thead><tbody id="licenseRows"></tbody></table></div><div class="license-box"><b>Aktivasi di aplikasi Windows:</b><p class="muted">Buka KACA.ID → Cloud Account & Lisensi, masuk dengan email/password, masukkan kode lisensi yang diberikan Super Admin, lalu beri nama booth.</p></div></div></section>
@@ -66,11 +92,106 @@ async function mailAction(path){let email=$('authEmail').value.trim();if(!email|
 $('forgotPassword').onclick=()=>mailAction('forgot-password');
 $('resendVerify').onclick=()=>mailAction('resend-verification');
 $('logout').onclick=async()=>{try{await api('/auth/logout',{method:'POST'})}catch{}setLoggedOut()};
-function go(page){currentPage=page;document.querySelectorAll('.nav button[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===page));$('pageTitle').textContent=({'dashboard':'Dashboard & Analytics','booths':'Multi Booth','sessions':'Riwayat Hasil Sesi','settings':'Harga, Timer & Mode','vouchers':'Manajemen Voucher','licenses':'Lisensi Akun','remote':'Remote Booth','admin':'Administrasi Lisensi'})[page]||'KACA.ID';loadPage(page).catch(e=>notice(e.message));}
+function go(page){currentPage=page;document.querySelectorAll('.nav button[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===page));$('pageTitle').textContent=({'dashboard':'Dashboard & Analytics','booths':'Multi Booth','sessions':'Riwayat Hasil Sesi','gallery':'Galeri Foto & Video','webshare':'Penyimpanan & Branding Web','settings':'Harga, Timer & Mode','vouchers':'Manajemen Voucher','licenses':'Lisensi Akun','remote':'Remote Booth','admin':'Administrasi Lisensi'})[page]||'KACA.ID';loadPage(page).catch(e=>notice(e.message));}
 document.querySelectorAll('.nav button[data-page]').forEach(x=>x.onclick=()=>go(x.dataset.page));$('refresh').onclick=()=>loadPage(currentPage).catch(e=>notice(e.message));
 function setOptions(select,booths){const saved=select.value;clear(select);for(const b of booths){const o=node('option',b.name);o.value=b.id;select.append(o)}if(booths.some(b=>b.id===saved))select.value=saved;}
 function statusBadge(b){return node('span',b.online?'Online':'Offline','badge '+(b.online?'ok':'warn'))}
 async function fetchBooths(){const r=await api('/booths');allBooths=r.booths;$('boothStatus').textContent=`${allBooths.filter(b=>b.online).length}/${allBooths.length} online`;for(const id of ['settingBooth','voucherBooth','remoteBooth'])setOptions($(id),allBooths);const saved=$('sessionBooth').value;clear($('sessionBooth'));const first=document.createElement('option');first.value='';first.textContent='Semua Booth';$('sessionBooth').append(first);for(const b of allBooths){const o=node('option',b.name);o.value=b.id;$('sessionBooth').append(o)}$('sessionBooth').value=saved;return allBooths;}
+
+let galleryOffset=0;
+async function loadWebGallery(){
+ const config=await api('/gallery/config');
+ const select=$('galleryBooth'),wanted=select.value;clear(select);
+ const all=node('option','Semua Booth');all.value='';select.append(all);
+ for(const b of config.booths){const option=node('option',b.name);option.value=b.id;select.append(option);}
+ if(config.booths.some(b=>b.id===wanted))select.value=wanted;
+ const limit=Math.max(1,Math.min(100,Number($('galleryLimit').value)||24));
+ const query=new URLSearchParams({limit:String(limit),offset:String(galleryOffset)});
+ if(select.value)query.set('booth_id',select.value);
+ const response=await api('/gallery?'+query);
+ const grid=$('galleryGrid');clear(grid);
+ let used=0;
+ for(const item of response.items){
+   used+=item.bytes||0;
+   const card=node('article','','gallery-item');
+   const preview=node('img');preview.alt='Preview sesi '+item.session_id;
+   preview.src='/static/placeholder.svg';
+   if(item.has_preview)loadProtectedImage('/gallery/'+encodeURIComponent(item.booth_id)+'/'+encodeURIComponent(item.session_id)+'/preview',preview).catch(()=>{});
+   card.append(preview,node('small',item.booth_name+' • '+item.mode),
+               node('b',item.session_id),node('small',new Date(item.created_at*1000).toLocaleString('id-ID')),
+               node('small',((item.bytes||0)/(1024*1024)).toFixed(1)+' MB · berlaku hingga '+new Date(item.expires_at*1000).toLocaleDateString('id-ID')));
+   const actions=node('div','','gallery-actions');
+   const link=new URL(item.url,location.origin);
+   if(link.origin!==location.origin)continue;
+   for(const [label,suffix] of [['Lihat',''],['Unduh','/download'],['Cetak','']]){
+     const a=node('a',label);a.href=link.href+suffix;a.target='_blank';a.rel='noopener noreferrer';
+     if(label==='Cetak')a.title='Buka halaman hasil, kemudian klik Cetak Foto pada browser';
+     actions.append(a);
+   }
+   const share=node('button','Salin Link');share.onclick=()=>navigator.clipboard.writeText(link.href).then(()=>notice('Tautan sesi berhasil disalin.')).catch(()=>notice('Browser tidak mengizinkan salin otomatis.'));
+   const del=node('button','Hapus','danger');del.onclick=async()=>{
+     if(!confirm('Hapus file web sesi '+item.session_id+'? File lokal pada booth tidak terhapus.'))return;
+     try{await api('/gallery/'+encodeURIComponent(item.booth_id)+'/'+encodeURIComponent(item.session_id),{method:'DELETE'});await loadWebGallery();}
+     catch(e){notice(e.message);}
+   };
+   actions.append(share,del);card.append(actions);grid.append(card);
+ }
+ if(!response.items.length)grid.append(node('p','Belum ada file web untuk filter ini. Aktifkan penyimpanan web pada booth.','muted'));
+ $('galleryCount').textContent=response.total+' sesi web';
+ $('galleryStorage').textContent='Halaman ini: '+(used/(1024*1024)).toFixed(1)+' MB';
+ $('galleryPager').textContent='Halaman '+(Math.floor(galleryOffset/limit)+1)+' • '+response.total+' sesi';
+ $('galleryPrev').disabled=galleryOffset===0;
+ $('galleryNext').disabled=!response.has_more;
+}
+async function loadGallerySettings(){
+ const result=await api('/gallery/config'),brand=result.brand;
+ $('galleryBrandTitle').value=brand.title;
+ $('galleryBrandSubtitle').value=brand.subtitle;
+ $('galleryBrandAccent').value=brand.accent;
+ $('galleryBrandRetention').value=brand.retention_days;
+ const mount=$('galleryPreferences');clear(mount);
+ for(const booth of result.booths){
+   const row=node('div','','gallery-pref-row'),label=node('span',booth.name),storage=node('select'),share=node('select');
+   for(const [value,text] of [['local','Lokal saja'],['drive','Lokal + Google Drive'],['web','Lokal + Web'],['both','Lokal + Drive + Web']]){
+     const option=node('option',text);option.value=value;storage.append(option);
+   }
+   for(const [value,text] of [['drive','Link/QR Google Drive'],['web','Link/QR Galeri Web']]){
+     const option=node('option',text);option.value=value;share.append(option);
+   }
+   storage.value=booth.mode||'local';share.value=booth.share||'drive';
+   const button=node('button','Simpan','btn sm');button.onclick=async()=>{
+     try{if(share.value==='web'&&!['web','both'].includes(storage.value))throw Error('Aktifkan penyimpanan web terlebih dahulu.');
+       await api('/gallery/preferences',{method:'POST',body:JSON.stringify({booth_id:booth.id,mode:storage.value,share:share.value})});
+       notice('Preferensi booth tersimpan; sinkronisasi berikutnya akan menerapkannya.');
+     }catch(e){notice(e.message);}
+   };
+   row.append(label,storage,share,button);mount.append(row);
+ }
+}
+$('galleryBrandForm').onsubmit=async e=>{
+ e.preventDefault();
+ try{
+   let logo_b64='';
+   const file=$('galleryBrandLogo').files[0];
+   if(file){
+     if(file.size>300000)throw Error('Logo maksimal 300 KB.');
+     if(!['image/png','image/jpeg'].includes(file.type))throw Error('Logo harus PNG/JPEG.');
+     const base64url=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=reject;fr.readAsDataURL(file);});
+     logo_b64=String(base64url).split(',')[1]||'';
+   }
+   await api('/gallery/brand',{method:'POST',body:JSON.stringify({title:$('galleryBrandTitle').value,
+    subtitle:$('galleryBrandSubtitle').value,accent:$('galleryBrandAccent').value,
+    retention_days:Number($('galleryBrandRetention').value),logo_b64})});
+   $('galleryBrandLogo').value='';
+   notice('Branding tersimpan. Berlaku pada tautan web sekarang dan selanjutnya.');
+ }catch(e){notice(e.message);}
+};
+$('galleryRefresh').onclick=()=>loadWebGallery().catch(e=>notice(e.message));
+$('galleryBooth').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
+$('galleryLimit').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
+$('galleryPrev').onclick=()=>{galleryOffset=Math.max(0,galleryOffset-Number($('galleryLimit').value));loadWebGallery().catch(e=>notice(e.message));};
+$('galleryNext').onclick=()=>{galleryOffset+=Number($('galleryLimit').value);loadWebGallery().catch(e=>notice(e.message));};
+
 async function loadPage(page,silent=false){const start=page;switch(page){case 'dashboard':{await fetchBooths();const d=await api('/analytics');for(const [id,value] of Object.entries({metricBooths:d.totals.booths,metricVisitors:num(d.totals.visitors),metricRevenue:rp.format(d.totals.revenue_idr),metricEstimate:rp.format(d.totals.unverified_estimate_idr)}))$(id).textContent=value;const bars=$('revenueBars');clear(bars);const peak=Math.max(1,...d.per_booth.map(b=>b.revenue));for(const b of d.per_booth){const row=node('div','','barline'),label=node('span',b.name),bar=node('div','','barbg'),fill=node('i');fill.style.width=Math.max(3,100*b.revenue/peak)+'%';bar.append(fill);row.append(label,bar,node('b',rp.format(b.revenue)));bars.append(row)}if(!d.per_booth.length)bars.append(node('div','Belum ada data booth','empty'));const list=$('summaryBooths');clear(list);for(const b of allBooths){const row=node('div','','barline');row.append(node('span',b.name),statusBadge(b),node('b',num(b.visitors)+' sesi'));list.append(row)}if(!allBooths.length)list.append(node('div','Aktifkan lisensi di aplikasi desktop untuk menambahkan booth.','empty'));await loadTrend();break;}case 'booths':{await fetchBooths();const t=$('boothRows');clear(t);for(const b of allBooths){const tr=document.createElement('tr');cell(tr,b.name);const s=cell(tr,'');s.append(statusBadge(b));cell(tr,num(b.visitors));cell(tr,rp.format(b.revenue_idr));cell(tr,fmt(b.license_expires_at));const actions=cell(tr,'');const button=node('button','Remote','btn alt sm');button.onclick=()=>{$('remoteBooth').value=b.id;go('remote')};actions.append(button);t.append(tr)}if(!allBooths.length)t.append(node('tr',''));break;}case 'sessions':{
  if(!allBooths.length)await fetchBooths();
  const params=sessionFilters();params.set('limit',String(sessionLimit));params.set('offset',String(sessionOffset));
@@ -89,7 +210,7 @@ async function loadPage(page,silent=false){const start=page;switch(page){case 'd
  $('sessionPrev').disabled=sessionOffset<=0;$('sessionNext').disabled=!d.has_more;
  $('sessionPagerLabel').textContent=d.total?`Menampilkan ${sessionOffset+1}–${sessionOffset+d.sessions.length} dari ${d.total} sesi`:'Belum ada sesi';
  break;}
-case 'settings':case 'vouchers':case 'remote':{await fetchBooths();if(page==='settings')await loadCameraCaps();if(page==='vouchers')await loadVoucherCommands();if(page==='remote')refreshRemote();break;}case 'licenses':{const d=await api('/licenses');const t=$('licenseRows');clear(t);for(const l of d.licenses){const tr=document.createElement('tr');cell(tr,l.display_code);cell(tr,fmt(l.expires_at));cell(tr,l.status);cell(tr,l.booth_id||'Belum diaktifkan');t.append(tr)}break;}case 'admin':{if(account.role!=='superadmin')return;const d=await api('/admin/users');const t=$('adminUsers');clear(t);for(const u of d.users){const tr=document.createElement('tr');cell(tr,u.email);cell(tr,u.name);cell(tr,u.role);t.append(tr)}await loadAdminExtras();break;}}}
+case 'gallery':{await loadWebGallery();break;}case 'webshare':{await loadGallerySettings();break;}case 'settings':case 'vouchers':case 'remote':{await fetchBooths();if(page==='settings')await loadCameraCaps();if(page==='vouchers')await loadVoucherCommands();if(page==='remote')refreshRemote();break;}case 'licenses':{const d=await api('/licenses');const t=$('licenseRows');clear(t);for(const l of d.licenses){const tr=document.createElement('tr');cell(tr,l.display_code);cell(tr,fmt(l.expires_at));cell(tr,l.status);cell(tr,l.booth_id||'Belum diaktifkan');t.append(tr)}break;}case 'admin':{if(account.role!=='superadmin')return;const d=await api('/admin/users');const t=$('adminUsers');clear(t);for(const u of d.users){const tr=document.createElement('tr');cell(tr,u.email);cell(tr,u.name);cell(tr,u.role);t.append(tr)}await loadAdminExtras();break;}}}
 function sessionFilters(){
  const params=new URLSearchParams();
  for(const [id,key] of [['sessionBooth','booth_id'],['sessionMode','mode'],['sessionFrom','date_from'],['sessionTo','date_to']]){
