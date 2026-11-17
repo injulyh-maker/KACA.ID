@@ -487,7 +487,7 @@ def enqueue_drive_asset_job(session_id, local_path, relative_path):
     job_id = str(session_id) + ':' + str(relative_path).replace('\\', '/')
     with drive_jobs_lock:
         old = drive_jobs.get(job_id, {})
-        if old.get('status') in ('ready', 'uploading', 'pending'):
+        if old.get('status') in ('ready', 'local_only', 'uploading', 'pending'):
             return dict(old)
         manifest = read_manifest(session_id) or {}
         connected = google_drive.status().get('connected')
@@ -520,7 +520,7 @@ def _google_drive_worker():
         job_id = drive_jobs_queue.get()
         try:
             with drive_jobs_lock: job = dict(drive_jobs.get(job_id) or {})
-            if not job or job.get('status') in ('ready', 'expired'): continue
+            if not job or job.get('status') in ('ready', 'local_only', 'expired'): continue
             sid = job.get('session_id')
             if sid and (read_manifest(sid) or {}).get('drive_deleted_at'):
                 with drive_jobs_lock:
@@ -555,14 +555,16 @@ def _google_drive_worker():
                         _start_session_drive_folder_provision(sid)
                     continue
                 result = google_drive.upload_session_asset(job['local_path'], folder_id, job['relative_path'])
-                job.update({'status':'ready','result':result,'updated_at':datetime.datetime.now().isoformat(timespec='seconds'),'error':None})
+                locally_skipped=bool(result.get('skipped'))
+                job.update({'status':'local_only' if locally_skipped else 'ready','result':result,
+                            'updated_at':datetime.datetime.now().isoformat(timespec='seconds'),'error':None})
                 with drive_jobs_lock:
                     drive_jobs[job_id] = job; _save_drive_jobs()
                     session_jobs = [j for j in drive_jobs.values() if j.get('session_id') == sid and j.get('kind') == 'asset']
-                    all_uploaded = all(j.get('status') == 'ready' for j in session_jobs)
+                    all_uploaded = all(j.get('status') in ('ready','local_only') for j in session_jobs)
                 manifest = read_manifest(sid) or {}
                 uploaded = set(manifest.get('drive_uploaded_assets') or [])
-                uploaded.add(job.get('relative_path'))
+                if not locally_skipped: uploaded.add(job.get('relative_path'))
                 manifest['drive_uploaded_assets'] = sorted(uploaded)
                 if manifest.get('drive_upload_manifest_complete') and all_uploaded:
                     manifest['drive_status'] = 'ready'; manifest['drive_error'] = None
