@@ -66,6 +66,8 @@ jobs:
           node tests/windows_sound_qr_menu_test.js
           ./runtime/python/python.exe -I -m py_compile backend/camera_server.py
           ./runtime/python/python.exe -I backend/tests/test_qr_print.py
+          ./runtime/python/python.exe -I backend/tests/test_drive_recovery.py
+          node tests/windows_drive_regression_test.js
       - name: Verify source packaging and dependencies
         shell: pwsh
         run: ./runtime/python/python.exe -I build/test_packaging_configuration.py
