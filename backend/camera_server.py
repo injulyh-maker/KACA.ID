@@ -839,10 +839,6 @@ def _write_session_qr(session):
                 output.write(qr_bytes)
             os.replace(archive_tmp, archive_qr)
             session['drive_qr_archive_path'] = archive_qr
-        # Upload the standalone QR alongside the session's final images.
-        # This is an app-created local file; errors are retried by Drive worker.
-        if session.get('drive_folder_id') and session.get('local_archive_path') and session.get('drive_qr_archive_path'):
-            enqueue_drive_asset_job(sid, session['drive_qr_archive_path'], 'Final_Results/QR_Google_Drive.png')
         print('[GOOGLE_DRIVE_QR_SAVED_LOCAL]', sid, qr_path, flush=True)
         return qr_path
     except Exception as exc:
@@ -1025,7 +1021,8 @@ def _sync_local_session_archive(session, final=False):
                 # Queue each completed deliverable immediately; WebM upload is independent
                 # from local slide playback. QR is intentionally never uploaded to Drive.
                 rel = os.path.relpath(target, folder).replace('\\','/')
-                enqueue_drive_asset_job(session['id'], target, rel)
+                if os.path.basename(target).lower() not in ('hasil_frame_dengan_qr.jpg','qr_google_drive.png'):
+                    enqueue_drive_asset_job(session['id'], target, rel)
             except OSError as exc:
                 copy_errors.append(str(exc))
                 print('[LOCAL_ARCHIVE_COPY_ERROR]', repr(exc), flush=True)
@@ -1107,6 +1104,7 @@ def reconcile_local_drive_sessions(max_sessions=300):
             for name in os.listdir(directory):
                 if not re.fullmatch(r'[A-Za-z0-9_.-]{1,180}',name):continue
                 if not name.lower().endswith(('.jpg','.jpeg','.png','.mp4','.gif')):continue
+                if name.lower() in ('qr_google_drive.png','hasil_frame_dengan_qr.jpg'):continue
                 file_path=os.path.join(directory,name)
                 if not os.path.isfile(file_path):continue
                 previous=drive_jobs.get(sid+':'+subfolder+'/'+name) or {}
@@ -1375,8 +1373,6 @@ def _refresh_drive_qr_output(session):
                 if not os.path.isfile(target):
                     os.makedirs(os.path.dirname(target),exist_ok=True)
                     shutil.copy2(dst,target)
-                if session.get('drive_folder_id'):
-                    enqueue_drive_asset_job(sid,target,'Final_Results/Hasil_Frame_Dengan_QR.jpg')
             return True
         image = cv2.imread(src,cv2.IMREAD_COLOR)
         if image is None: return False
@@ -1405,8 +1401,6 @@ def _refresh_drive_qr_output(session):
                 os.makedirs(final_dir,exist_ok=True)
                 qr_export=os.path.join(final_dir,'Hasil_Frame_Dengan_QR.jpg')
                 shutil.copy2(dst,qr_export)
-                if session.get('drive_folder_id'):
-                    enqueue_drive_asset_job(sid,qr_export,'Final_Results/Hasil_Frame_Dengan_QR.jpg')
             except OSError as archive_exc:
                 print('[PRINT_QR_ARCHIVE_WARNING]',repr(archive_exc),flush=True)
         return True

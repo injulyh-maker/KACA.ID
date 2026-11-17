@@ -141,18 +141,20 @@ ipcMain.handle('printer:open-properties', async (_event, printerName) => { if(pr
 ipcMain.handle('external:open', async (_event, url) => { const value=String(url||'').trim(); const isAllowedHttps=/^https:\/\/(accounts\.google\.com|drive\.google\.com|wa\.me|web\.whatsapp\.com|api\.whatsapp\.com)\//i.test(value) || /^https:\/\/kacastudio\.id\/paket\/?(?:[?#].*)?$/i.test(value); const isAllowedMailto=/^mailto:[^\r\n<>]+$/i.test(value); if(!isAllowedHttps&&!isAllowedMailto) throw new Error('Alamat berbagi eksternal tidak diizinkan.'); await shell.openExternal(value); return true; });
 // DOKU Checkout opens inside a sandboxed KACA.ID payment window, not in WhatsApp/Web.
 let dokuCheckoutWindow = null;
-function isAllowedDokuUrl(url){
-  try{const u=new URL(String(url||''));return u.protocol==='https:'&&(u.hostname==='doku.com'||u.hostname.endsWith('.doku.com'));}
+function isAllowedCheckoutUrl(url){
+  try{const u=new URL(String(url||''));return u.protocol==='https:'&&(
+    u.hostname==='doku.com'||u.hostname.endsWith('.doku.com')||
+    u.hostname==='midtrans.com'||u.hostname.endsWith('.midtrans.com'));}
   catch{return false;}
 }
 ipcMain.handle('payment:open-checkout', async (_event, checkoutUrl) => {
-  if(!isAllowedDokuUrl(checkoutUrl)) throw new Error('Alamat DOKU Checkout tidak valid.');
+  if(!isAllowedCheckoutUrl(checkoutUrl)) throw new Error('Alamat checkout DOKU/Midtrans tidak diizinkan.');
   if(dokuCheckoutWindow && !dokuCheckoutWindow.isDestroyed()) dokuCheckoutWindow.close();
   const win=new BrowserWindow({width:690,height:850,minWidth:500,minHeight:650,modal:true,parent:mainWindow||undefined,
     autoHideMenuBar:true,icon:KACA_APP_ICON,backgroundColor:'#fff',webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   dokuCheckoutWindow=win;
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-  win.webContents.on('will-navigate', (event, next) => {if(!isAllowedDokuUrl(next))event.preventDefault();});
+  win.webContents.on('will-navigate', (event, next) => {if(!isAllowedCheckoutUrl(next))event.preventDefault();});
   win.on('closed',()=>{if(dokuCheckoutWindow===win)dokuCheckoutWindow=null;});
   await win.loadURL(checkoutUrl);
   return {ok:true};

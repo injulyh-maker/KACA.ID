@@ -291,6 +291,11 @@ class GoogleDriveManager:
         if not parts:
             raise RuntimeError('Lokasi file sesi tidak valid.')
         filename = parts[-1]
+        # Standalone Google Drive QR and QR-overlaid printable masters belong
+        # ONLY in the local archive. Do not expose/duplicate them in Drive.
+        if filename.lower() in ('qr_google_drive.png','google_drive_qr.png',
+                                'hasil_frame_dengan_qr.jpg','output_print_qr.jpg'):
+            return {'skipped':True,'reason':'local_qr_only'}
         # Browser-only WebM previews stay on this PC; only the MP4 master is uploaded.
         if filename.lower().endswith('.webm'):
             return {'skipped': True, 'reason': 'local_preview_only'}
@@ -318,7 +323,9 @@ class GoogleDriveManager:
             for filename in files:
                 lower_name = filename.lower()
                 # ZIP bundles and internal session metadata stay local; never publish them to Drive.
-                if lower_name.endswith(('.tmp', '.zip')) or lower_name == 'session_info.json':
+                if lower_name.endswith(('.tmp', '.zip')) or lower_name in (
+                    'session_info.json','qr_google_drive.png','google_drive_qr.png',
+                    'hasil_frame_dengan_qr.jpg','output_print_qr.jpg'):
                     continue
                 self._upload_resumable(os.path.join(base, filename), parent)
         return {'folder_id': session_id,
