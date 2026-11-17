@@ -4187,9 +4187,8 @@ class Handler(BaseHTTPRequestHandler):
                 if status!='aktif':
                     messages={'nonaktif':'Voucher sudah dinonaktifkan.','kedaluwarsa':'Voucher sudah kedaluwarsa.','habis':'Batas penggunaan voucher sudah tercapai.'}
                     return self.send_json({'ok':False,'error':messages.get(status,'Voucher tidak dapat digunakan.'),'status':status},409)
-                voucher['used_count']=int(voucher.get('used_count',0))+1
-                voucher['last_used_at']=datetime.datetime.now().isoformat(timespec='seconds')
-                _save_vouchers()
+                # Validation only. Consuming at redemption AND session start
+                # previously charged the same voucher twice.
                 return self.send_json({'ok':True,'voucher':_voucher_public(voucher),'remaining_uses':max(0,int(voucher.get('max_uses',1))-int(voucher['used_count']))})
         if path == '/api/vouchers/delete':
             try:
@@ -4655,11 +4654,13 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
                 if frame_error:return self.send_json({'ok':False,'error':frame_error},409)
                 # Reuse the existing verified checkout and voucher rules.
                 method=str(data.get('payment_method') or '')
-                if method=='qris_manual' and qris_config.get('mode')=='doku_checkout':
-                    return self.send_json({'ok':False,'error':'QRIS dinamis memerlukan verifikasi DOKU.'},409)
-                if method=='qris_doku':
-                    try:doku_qris.consume_paid(str(data.get('payment_invoice') or ''))
+                if method=='qris_manual' and qris_config.get('mode','static_manual')!='static_manual':
+                    return self.send_json({'ok':False,'error':'QRIS statis sedang tidak aktif.'},409)
+                if method in ('qris_doku','qris_midtrans'):
+                    try:_verified_payment(method,str(data.get('payment_invoice') or ''))
                     except ValueError as exc:return self.send_json({'ok':False,'error':str(exc)},409)
+                if method=='free' and _payment_quote()['amount']!=0:
+                    return self.send_json({'ok':False,'error':'Harga sesi bukan Rp0.'},409)
                 if method=='voucher':
                     code=str(data.get('voucher_code') or '').strip().upper()
                     with voucher_lock:
@@ -4693,21 +4694,18 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
                     return self.send_json({'ok':False,'error':'Aktifkan preview kamera Angle 1 sebelum memulai sesi.'},409)
                 payment_method=str(data.get('payment_method') or '').strip().lower()
                 voucher_code=str(data.get('voucher_code') or '').strip().upper()
-                if payment_method == 'qris_manual' and qris_config.get('mode') == 'doku_checkout':
-                    return self.send_json({'ok': False, 'error': 'QRIS otomatis aktif; verifikasi manual tidak dapat digunakan.'}, 409)
-                if payment_method == 'qris_doku':
-                    try:
-                        if qris_config.get('mode') != 'doku_checkout':
-                            raise ValueError('Mode QRIS otomatis belum aktif.')
-                        doku_qris.consume_paid(str(data.get('payment_invoice') or ''))
-                    except ValueError as exc:
-                        return self.send_json({'ok': False, 'error': str(exc)}, 409)
+                if payment_method == 'qris_manual' and qris_config.get('mode','static_manual')!='static_manual':
+                    return self.send_json({'ok':False,'error':'QRIS statis belum aktif.'},409)
                 payment_verified=False
                 verified_amount=0
-                if payment_method == 'qris_doku':
-                    item=doku_qris.ledger.get(str(data.get('payment_invoice') or ''),{})
-                    payment_verified=bool(item.get('status')=='paid' and item.get('consumed'))
-                    verified_amount=int(item.get('amount') or 0) if payment_verified else 0
+                if payment_method in ('qris_doku','qris_midtrans'):
+                    try:
+                        verified_amount=_verified_payment(payment_method,str(data.get('payment_invoice') or ''))
+                        payment_verified=True
+                    except ValueError as exc:
+                        return self.send_json({'ok':False,'error':str(exc)},409)
+                if payment_method=='free' and _payment_quote()['amount']!=0:
+                    return self.send_json({'ok':False,'error':'Harga sesi bukan Rp0.'},409)
                 if payment_method == 'voucher':
                     with voucher_lock:
                         voucher=next((v for v in vouchers_store if str(v.get('code','')).upper()==voucher_code),None)
@@ -4724,7 +4722,7 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
                 mode = data.get('session_mode', 'fixed_count')
                 frame_slots = max(1, min(8, int(data.get('frame_slots', 4))))
                 session = {'id':sid,'created_at':now,'status':'active','photos':[],'settings':data,'filter':data.get('filter','Natural'),'paper_size':data.get('paper_size','4R'),'print_dpi':int(data.get('print_dpi',300) or 300),'session_mode':mode,'frame_slots':frame_slots,'frame_id':data.get('frame_id'),'layout_slots':data.get('layout_slots') or [],'drive_qr_enabled':bool(data.get('drive_qr_enabled',False)),'drive_qr_layout':data.get('drive_qr_layout') or {'x':.78,'y':.78,'w':.16,'h':.16},'mirror':bool(data.get('mirror',False)),'multicam_enabled':bool(data.get('multicam_enabled',False)),'camera_angle':int(data.get('camera_angle',0) or 0),'camera_rotation':int(data.get('camera_rotation',0) or 0)%360,'camera_flip_horizontal':bool(data.get('camera_flip_horizontal',False)),'camera_flip_vertical':bool(data.get('camera_flip_vertical',False)),
-                'camera_rotation2':int(data.get('camera_rotation2',0) or 0)%360,'camera_flip_horizontal2':bool(data.get('camera_flip_horizontal2',False)),'camera_flip_vertical2':bool(data.get('camera_flip_vertical2',False)),'event_id':_event_storage_key(data.get('event_id')),'event_name':str(data.get('event_name') or '')[:100],'payment_method':payment_method,'payment_amount_idr':verified_amount,'payment_verification':'success' if payment_verified else 'unverified','payment_invoice':str(data.get('payment_invoice') or '') if payment_method=='qris_doku' else None,'voucher_code':voucher_code if payment_method=='voucher' else None,'capture_open':True,'recording':False}
+                'camera_rotation2':int(data.get('camera_rotation2',0) or 0)%360,'camera_flip_horizontal2':bool(data.get('camera_flip_horizontal2',False)),'camera_flip_vertical2':bool(data.get('camera_flip_vertical2',False)),'event_id':_event_storage_key(data.get('event_id')),'event_name':str(data.get('event_name') or '')[:100],'payment_method':payment_method,'payment_amount_idr':verified_amount,'payment_verification':'success' if payment_verified else 'unverified','payment_invoice':str(data.get('payment_invoice') or '') if payment_method in ('qris_doku','qris_midtrans') else None,'voucher_code':voucher_code if payment_method=='voucher' else None,'capture_open':True,'recording':False}
                 os.makedirs(os.path.join(SESSIONS_DIR,sid),exist_ok=True)
                 session['live_photo_enabled'] = bool(data.get('live_photo_enabled', False))
                 session['live_photo_duration_seconds'] = max(5, min(30, int(data.get('live_photo_duration', 5) or 5)))
