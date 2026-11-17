@@ -60,8 +60,10 @@ class DokuQris:
             secret = str(data.get('secret_key', '')).strip()
             if not client or len(client) > 150:
                 raise ValueError('Client ID DOKU belum valid.')
-            if not secret and client == self.config.get('client_id'):
+            if not secret and client == self.config.get('client_id') and environment == self.config.get('environment'):
                 secret = self.config.get('secret_key', '')
+            elif not secret and environment != self.config.get('environment'):
+                raise ValueError('Pindah DOKU Sandbox/Production memerlukan Secret Key untuk environment tujuan.')
             if not secret:
                 raise ValueError('Secret Key DOKU harus diisi.')
             if len(secret) > 1000:
