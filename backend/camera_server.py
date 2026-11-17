@@ -6,6 +6,7 @@ from google_drive import GoogleDriveManager
 from session_retention import SessionRetention
 from whatsapp_cloud import WhatsAppCloudManager, normalize_whatsapp_number
 from doku_qris import DokuQris
+from midtrans_snap import MidtransSnap
 from whatsapp_gateway import FonnteGateway
 
 try:
@@ -221,6 +222,7 @@ google_drive = GoogleDriveManager(DATA_DIR)
 session_retention = SessionRetention(DATA_DIR)
 whatsapp_cloud = WhatsAppCloudManager(DATA_DIR)
 doku_qris = DokuQris(DATA_DIR)
+midtrans_snap = MidtransSnap(DATA_DIR)
 fonnte_gateway = FonnteGateway(DATA_DIR)
 DRIVE_JOBS_PATH = os.path.join(DATA_DIR, 'google-drive-jobs.json')
 WHATSAPP_JOBS_PATH = os.path.join(DATA_DIR, 'whatsapp-jobs.json')
@@ -236,6 +238,50 @@ try:
     with open(qris_config_path, 'r', encoding='utf-8') as _qf: qris_config = json.load(_qf)
     if not isinstance(qris_config, dict): qris_config = {}
 except Exception: qris_config = {}
+
+def _save_qris_configuration():
+    tmp=qris_config_path+'.tmp'
+    with open(tmp,'w',encoding='utf-8') as f:
+        json.dump(qris_config,f,ensure_ascii=False,indent=2)
+    os.replace(tmp,qris_config_path)
+
+
+def _payment_quote():
+    """Single authoritative price used by QRIS gateways and voucher checkout.
+
+    There is no arbitrary application minimum (Rp0 means a free session).
+    External payment processors may impose their own minimum and reject
+    tiny positive amounts, which must never be treated as successful.
+    """
+    base=max(0,min(999999999999,int(qris_config.get('base_price',qris_config.get('amount',0)) or 0)))
+    discount_type=qris_config.get('discount_type','nominal')
+    discount_value=max(0,int(qris_config.get('discount_value',0) or 0))
+    if discount_type=='percent':
+        discount_value=min(100,discount_value)
+        discount=(base*discount_value)//100
+    else:
+        discount=min(base,discount_value)
+    amount=max(0,base-discount)
+    return {'base_price':base,'discount_type':discount_type,
+            'discount_value':discount_value,'discount_amount':discount,'amount':amount}
+
+
+def _verified_payment(method,invoice,*,consume=True):
+    """Authorize a single paid invoice; never trust browser success or arbitrary amount."""
+    invoice=str(invoice or '').strip()
+    providers={'qris_doku':doku_qris,'qris_midtrans':midtrans_snap}
+    if method not in providers:
+        raise ValueError('Metode pembayaran dinamis tidak dikenal.')
+    provider=providers[method]
+    with provider.lock:
+        entry=provider.ledger.get(invoice)
+        if not entry or entry.get('status')!='paid' or entry.get('consumed'):
+            raise ValueError('Invoice belum dibayar, belum diverifikasi, atau sudah digunakan.')
+        amount=int(entry.get('amount') or 0)
+        if amount<=0:raise ValueError('Nominal invoice tidak valid.')
+        if consume:provider.consume_paid(invoice)
+        return amount
+
 
 def _save_vouchers():
     tmp = VOUCHERS_PATH + '.tmp'
@@ -3391,16 +3437,25 @@ class Handler(BaseHTTPRequestHandler):
             rows.sort(key=lambda x:x.get('created_at',''), reverse=True)
             return self.send_json({'ok':True,'vouchers':rows})
         if path == '/api/qris/status':
-            doku = doku_qris.public_config()
-            mode = str(qris_config.get('mode', 'static_manual'))
-            configured = doku['configured'] if mode == 'doku_checkout' else os.path.isfile(QRIS_IMAGE_PATH)
-            return self.send_json({'ok': True, 'configured': configured, 'merchant_name': qris_config.get('merchant_name',''),
-                                   'instructions': qris_config.get('instructions','Scan QRIS lalu tunggu verifikasi.'),
-                                   'amount': qris_config.get('amount',0), 'mode': mode, 'doku': doku})
+            mode=str(qris_config.get('mode','static_manual'))
+            static_image=os.path.isfile(QRIS_IMAGE_PATH)
+            doku=doku_qris.public_config()
+            midtrans=midtrans_snap.public_config()
+            configured={'disabled':False,'static_manual':static_image,
+                        'doku_checkout':doku['configured'],
+                        'midtrans_snap':midtrans['configured']}.get(mode,False)
+            return self.send_json({'ok':True,'configured':configured,'static_image_available':static_image,
+                'merchant_name':qris_config.get('merchant_name',''),'mode':mode,
+                'instructions':qris_config.get('instructions','Scan QRIS lalu tunggu verifikasi.'),
+                **_payment_quote(),'doku':doku,'midtrans':midtrans})
         if path == '/api/qris/checkout/status':
-            invoice = parse_qs(urlparse(self.path).query).get('invoice', [''])[0]
-            try: return self.send_json({'ok': True, **doku_qris.check(invoice)})
-            except Exception as exc: return self.send_json({'ok': False, 'error': str(exc)}, 409)
+            invoice=parse_qs(urlparse(self.path).query).get('invoice',[''])[0]
+            try:
+                if invoice in doku_qris.ledger:result=doku_qris.check(invoice)
+                elif invoice in midtrans_snap.ledger:result=midtrans_snap.check(invoice)
+                else:raise ValueError('Invoice tidak ditemukan pada provider yang dipilih.')
+                return self.send_json({'ok':True,**result})
+            except Exception as exc:return self.send_json({'ok':False,'error':str(exc)},409)
         if path == '/api/whatsapp/fonnte/status':
             return self.send_json({'ok': True, **fonnte_gateway.status()})
         if path == '/api/whatsapp/fonnte/device':
