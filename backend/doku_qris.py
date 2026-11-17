@@ -8,6 +8,7 @@ import datetime as dt
 import hashlib
 import hmac
 import json
+from decimal import Decimal, InvalidOperation
 import os
 import secrets
 import threading
@@ -109,7 +110,20 @@ class DokuQris:
         status, response_body, response_headers = self.http(method, url, headers, body or None)
         if status < 200 or status >= 300:
             # Never include secrets or full payment response in messages/logs.
-            raise RuntimeError(f'DOKU mengembalikan HTTP {status}. Periksa akun, QRIS aktif, dan credential.')
+            # Show safe provider validation detail without leaking credentials or payloads.
+            try:
+                detail=json.loads(response_body.decode('utf-8','replace'))
+                if isinstance(detail,dict):
+                    err=detail.get('error') or {}
+                    if isinstance(err,dict):
+                        explanation=err.get('message') or err.get('description') or err.get('code')
+                    else:explanation=str(err)
+                    explanation=explanation or detail.get('message') or detail.get('error_message') or detail.get('responseMessage')
+                else:explanation=''
+            except (ValueError,TypeError,UnicodeError):explanation=''
+            explanation=str(explanation or '').replace(str(cfg.get('secret_key') or ''),'[REDACTED]')[:200]
+            raise RuntimeError('DOKU HTTP '+str(status)+(': '+explanation if explanation else '')+
+                               '. Periksa environment, aktivasi QRIS merchant, serta parameter transaksi.')
         try:
             result = json.loads(response_body)
         except (ValueError, TypeError):
@@ -120,8 +134,10 @@ class DokuQris:
 
     def create(self, amount):
         amount = int(amount)
-        if not 1000 <= amount <= 999999999999:
-            raise ValueError('Nominal QRIS harus antara Rp1.000 sampai Rp999.999.999.999.')
+        # Provider-specific minima are validated by DOKU; a local free session
+        # (Rp0) must never be submitted as a paid checkout.
+        if not 1 <= amount <= 999999999999:
+            raise ValueError('Checkout DOKU memerlukan nominal positif; sesi gratis tidak memakai gateway.')
         with self.lock:
             if not self.public_config()['configured']:
                 raise ValueError('Client ID dan Secret Key DOKU belum diatur.')
@@ -148,7 +164,7 @@ class DokuQris:
             row = self.ledger.get(str(invoice))
             if not row:
                 raise ValueError('Invoice QRIS tidak ditemukan.')
-            return {k: row.get(k) for k in ('invoice', 'amount', 'status', 'checkout_url', 'created_at')}
+            return {**{k: row.get(k) for k in ('invoice', 'amount', 'status', 'checkout_url', 'created_at')}, 'provider':'doku'}
 
     def check(self, invoice, *, now=None):
         """Provider-authenticated read; DOKU recommends querying after 60 seconds."""
@@ -168,11 +184,21 @@ class DokuQris:
             row['checked_at'] = now
             self._save(self.ledger_path, self.ledger)
         response = self._request('GET', '/orders/v1/status/' + urllib.parse.quote(invoice, safe=''))
-        transaction = response.get('transaction') or {}
-        order = response.get('order') or {}
-        # Never mark paid unless the provider confirms exact invoice AND amount.
-        if str(order.get('invoice_number') or '') != invoice or str(order.get('amount') or '') != str(row['amount']):
-            raise RuntimeError('Status DOKU tidak cocok dengan invoice atau nominal. Pembayaran tidak dikonfirmasi.')
+        # DOKU may serialize amounts as 1000, "1000" or "1000.00".
+        # Compare monetary values, not string representations, but never
+        # accept missing identifiers, missing amounts or a merely successful page.
+        payload = response.get('response') if isinstance(response.get('response'),dict) else response
+        transaction = payload.get('transaction') or {}
+        order = payload.get('order') or {}
+        if str(order.get('invoice_number') or '') != invoice:
+            raise RuntimeError('Invoice status DOKU tidak cocok. Pembayaran belum dikonfirmasi.')
+        try:
+            expected=Decimal(str(row['amount']))
+            actual=Decimal(str(order['amount']))
+            if not actual.is_finite() or actual != expected:
+                raise ValueError('wrong amount')
+        except (KeyError,ValueError,InvalidOperation,TypeError):
+            raise RuntimeError('Nominal dari status DOKU tidak cocok atau tidak tersedia; transaksi belum dikonfirmasi.')
         state = str(transaction.get('status') or '').upper()
         with self.lock:
             row = self.ledger[invoice]
