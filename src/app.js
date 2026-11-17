@@ -1407,8 +1407,10 @@ const statusEl=$cap('#resultRenderStatus');if(st.render_status==='error'){if(sta
 const img=$cap('#resultFrameImage');
 if(st.print_qr_ready&&img&&img.dataset.printQrReady!=='1'&&(!img.dataset.printQrRequestAt||Number(img.dataset.printQrRequestAt)<Date.now()-5000)){
  img.dataset.printQrRequestAt=String(Date.now());
- img.onload=()=>{img.dataset.printQrReady='1';img.dataset.resultLoaded='1';hideFlowSlideLoading();};
- img.onerror=()=>{img.dataset.printQrReady='';img.src=`${base}/output.jpg?v=${Date.now()}`;
+ img.dataset.resultLoaded='1'; // Do not immediately overwrite the QR JPG with plain output.jpg.
+ img.onload=()=>{img.dataset.printQrReady='1';hideFlowSlideLoading();};
+ img.onerror=()=>{img.dataset.printQrReady='';img.onerror=null;img.onload=()=>hideFlowSlideLoading();
+   img.src=`${base}/output.jpg?v=${Date.now()}`;
    const note=$cap('#shareNotice');if(note)note.textContent='Preview QR cetak belum dapat dibuka. Coba lagi atau periksa QR Drive.';};
  img.src=`${base}/output-print-qr.jpg?stamp=${Date.now()}`;
  const note=$cap('#shareNotice');if(note)note.textContent='Menampilkan JPG cetak dengan QR Google Drive…';
