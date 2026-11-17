@@ -1,6 +1,15 @@
 package id.kaca.tablet;
 
 import android.Manifest;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.hardware.usb.UsbManager;
+import android.hardware.usb.UsbDevice;
+import android.content.ContentResolver;
+import java.io.OutputStream;
+import java.io.IOException;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -48,6 +57,31 @@ public final class TabletActivity extends MainActivity {
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest webCameraRequest;
     private Uri lastVideoUri;
+    private static final String PTP_PERMISSION_ACTION="id.kaca.tablet.USB_CAMERA_PERMISSION";
+    private int pendingUsbId=-1;
+    private boolean pendingUsbCapture=false;
+    private boolean usbReceiverRegistered=false;
+    private final BroadcastReceiver ptpUsbPermissionReceiver=new BroadcastReceiver(){
+        @Override public void onReceive(Context context, Intent intent){
+            if(!PTP_PERMISSION_ACTION.equals(intent.getAction())||pendingUsbId<0)return;
+            int id=pendingUsbId;boolean capture=pendingUsbCapture;
+            pendingUsbId=-1;
+            UsbManager manager=(UsbManager)getSystemService(USB_SERVICE);
+            UsbDevice device=findPtpDevice(id);
+            if(device==null){notice("Kamera USB dilepas sebelum izin diberikan.");return;}
+            if(manager==null||!intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED,false)||!manager.hasPermission(device)){
+                notice("Izin kamera USB tidak diberikan. Pilih Izinkan untuk uji PTP.");return;
+            }
+            launchUsbWork(device,capture);
+        }
+    };
+
+    @Override public void onCreate(Bundle state){
+        super.onCreate(state);
+        registerReceiver(ptpUsbPermissionReceiver,new IntentFilter(PTP_PERMISSION_ACTION),Context.RECEIVER_NOT_EXPORTED);
+        usbReceiverRegistered=true;
+    }
+
 
     @Override void draw() {
         // MainActivity uses these for native session processing callbacks.
@@ -204,10 +238,12 @@ public final class TabletActivity extends MainActivity {
                     }
                     if(!ptp&&!uvc)continue;
                     org.json.JSONObject row=new org.json.JSONObject();
+                    row.put("deviceId",d.getDeviceId());
+                    row.put("ptpCompatible",UsbPtpCamera.supports(d));
                     row.put("vendorId",String.format(java.util.Locale.ROOT,"%04X",d.getVendorId()));
                     row.put("productId",String.format(java.util.Locale.ROOT,"%04X",d.getProductId()));
                     row.put("name",d.getProductName()==null?"Perangkat USB":d.getProductName());
-                    row.put("type",ptp?"Kamera foto PTP (terdeteksi, shutter belum didukung)":"USB Video Class (UVC)");
+                    row.put("type",ptp?"Kamera foto USB/PTP (uji pemotretan standar tersedia)":"USB Video Class (UVC)");
                     row.put("permission",usb.hasPermission(d));devices.put(row);
                 }
             }
@@ -216,7 +252,85 @@ public final class TabletActivity extends MainActivity {
         return result;
     }
 
+
+    private UsbDevice findPtpDevice(int id){
+        UsbManager mgr=(UsbManager)getSystemService(USB_SERVICE);
+        if(mgr==null)return null;
+        UsbDevice found=null;
+        for(UsbDevice candidate:mgr.getDeviceList().values()){
+            if(!UsbPtpCamera.supports(candidate))continue;
+            if(id>=0&&candidate.getDeviceId()!=id)continue;
+            if(found!=null&&id<0)return null; // Multiple cameras: select one explicitly.
+            found=candidate;
+        }
+        return found;
+    }
+    private void requestPtpOperation(int deviceId,boolean capture){
+        if(capture)try{verifiedLicense();}catch(Exception e){notice("Lisensi belum aktif: "+e.getMessage());return;}
+        UsbManager usb=(UsbManager)getSystemService(USB_SERVICE);
+        UsbDevice selected=findPtpDevice(deviceId);
+        if(usb==null||selected==null){
+            notice("Tidak ada kamera PTP USB terpilih. Sambungkan kamera dalam mode PTP melalui kabel OTG lalu pilih perangkat.");return;
+        }
+        if(usb.hasPermission(selected)){launchUsbWork(selected,capture);return;}
+        if(pendingUsbId>=0){notice("Selesaikan permintaan izin USB yang sebelumnya.");return;}
+        if(!usbReceiverRegistered){notice("Layanan izin USB belum siap.");return;}
+        pendingUsbId=selected.getDeviceId();pendingUsbCapture=capture;
+        Intent permission=new Intent(PTP_PERMISSION_ACTION).setPackage(getPackageName());
+        PendingIntent result=PendingIntent.getBroadcast(this,selected.getDeviceId(),
+                permission,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        try{
+            usb.requestPermission(selected,result);
+            notice("Android meminta izin akses kamera USB. Pilih Izinkan.");
+        }catch(Exception e){pendingUsbId=-1;notice("Izin USB gagal diminta: "+e.getMessage());}
+    }
+    private void launchUsbWork(UsbDevice device,boolean capture){
+        worker.execute(()->{
+            Uri raw=null;
+            try{
+                UsbManager usb=(UsbManager)getSystemService(USB_SERVICE);
+                if(usb==null||!usb.hasPermission(device))throw new IOException("Izin kamera USB tidak tersedia.");
+                if(capture)verifiedLicense();
+                notice("Menghubungkan kamera USB/PTP...");
+                try(UsbPtpCamera camera=new UsbPtpCamera(usb,device)){
+                    if(!capture){
+                        JSONObject report=camera.probe();
+                        js("window.kacaAndroid?.onPtpReport("+JSONObject.quote(report.toString())+")");
+                        return;
+                    }
+                    notice("Memotret dengan PTP, menunggu JPEG dari kamera...");
+                    byte[] jpeg=camera.captureJpeg();
+                    android.content.ContentValues values=new android.content.ContentValues();
+                    values.put(MediaStore.Images.Media.DISPLAY_NAME,"KACA-PTP-RAW-"+System.currentTimeMillis()+".jpg");
+                    values.put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg");
+                    values.put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/KACA-ID/Originals");
+                    values.put(MediaStore.Images.Media.IS_PENDING,1);
+                    raw=getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);
+                    if(raw==null)throw new IOException("Tidak dapat menyimpan JPEG kamera DSLR.");
+                    try(OutputStream out=getContentResolver().openOutputStream(raw)){
+                        if(out==null)throw new IOException("Penyimpanan foto USB tidak dapat dibuka.");
+                        out.write(jpeg);
+                    }
+                    android.content.ContentValues ready=new android.content.ContentValues();
+                    ready.put(MediaStore.Images.Media.IS_PENDING,0);
+                    getContentResolver().update(raw,ready,null,null);
+                }
+                notice("Foto DSLR diterima. Menerapkan frame KACA.ID...");
+                combine(raw); // Existing photo-frame composition, archive and Cloud metadata path.
+            }catch(Exception e){
+                notice((capture?"Pemotretan USB/PTP":"Pengujian PTP")+" gagal: "+e.getMessage());
+                if(raw!=null)try{
+                    // Retain successfully-written originals; remove only pending/incomplete images.
+                    android.database.Cursor c=getContentResolver().query(raw,new String[]{MediaStore.Images.Media.IS_PENDING},null,null,null);
+                    if(c!=null)try{if(c.moveToFirst()&&c.getInt(0)==1)getContentResolver().delete(raw,null,null);}finally{c.close();}
+                }catch(Exception ignored){}
+            }
+        });
+    }
+
     @Override public void onDestroy(){
+        if(usbReceiverRegistered){try{unregisterReceiver(ptpUsbPermissionReceiver);}catch(Exception ignored){}usbReceiverRegistered=false;}
+
         if(webCameraRequest!=null){webCameraRequest.deny();webCameraRequest=null;}
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
         if(web!=null){web.removeJavascriptInterface("AndroidBooth");web.destroy();web=null;}
@@ -266,6 +380,8 @@ public final class TabletActivity extends MainActivity {
                 }catch(Exception e){notice("Gagal membuka cetak: "+e.getMessage());}
             });
         }
+        @JavascriptInterface public void probeUsbPtp(int id){runOnUiThread(()->requestPtpOperation(id,false));}
+        @JavascriptInterface public void captureUsbPtp(int id){runOnUiThread(()->requestPtpOperation(id,true));}
         @JavascriptInterface public void capture(){runOnUiThread(()->TabletActivity.this.capture());}
         @JavascriptInterface public void recordVideo(){runOnUiThread(()->TabletActivity.this.recordVideo());}
         @JavascriptInterface public void sync(){runOnUiThread(()->TabletActivity.this.sync());}
