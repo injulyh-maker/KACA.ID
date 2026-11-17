@@ -3363,7 +3363,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/google-drive/status':
             with drive_jobs_lock: jobs=[dict(v) for v in drive_jobs.values()]
             jobs.sort(key=lambda x:x.get('updated_at',''),reverse=True)
-            return self.send_json({'ok':True,**google_drive.status(),'jobs':jobs[:30]})
+            result={'ok':True,**google_drive.status(),'jobs':jobs[:30]}
+            result['job_counts']={state:sum(j.get('status')==state for j in jobs)
+                                  for state in ('ready','pending','uploading','waiting_folder','waiting_auth','error')}
+            return self.send_json(result)
         if path.startswith('/api/google-drive/job/'):
             job_id=path.rsplit('/',1)[-1]
             with drive_jobs_lock: job=drive_jobs.get(job_id)
@@ -3876,6 +3879,21 @@ class Handler(BaseHTTPRequestHandler):
                     qr_candidates.append(candidate)
             qr_available=any(os.path.isfile(candidate) and os.path.getsize(candidate)>0 for candidate in qr_candidates)
             return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available,'print_qr_ready':bool(manifest.get('drive_qr_enabled') and os.path.isfile(os.path.join(session_dir,'output_print_qr.jpg'))),'print_qr_error':manifest.get('print_qr_error') or manifest.get('drive_qr_embed_error')})
+        if path.startswith('/api/session/') and path.endswith('/drive-diagnostic'):
+            sid=path.split('/')[-2]
+            if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid):return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
+            manifest=read_manifest(sid)
+            if not manifest:return self.send_json({'ok':False,'error':'Sesi tidak ditemukan.'},404)
+            with drive_jobs_lock:
+                relevant=[{'relative_path':j.get('relative_path'),'status':j.get('status'),
+                           'attempts':j.get('attempts',0),'error':j.get('error')}
+                          for j in drive_jobs.values() if j.get('session_id')==sid]
+            return self.send_json({'ok':True,'session_id':sid,'connected':google_drive.status().get('connected'),
+                 'folder_status':manifest.get('drive_folder_status'),'drive_status':manifest.get('drive_status'),
+                 'drive_url':manifest.get('drive_url'),'drive_error':manifest.get('drive_error'),
+                 'qr_error':manifest.get('drive_qr_error'),'print_qr_error':manifest.get('print_qr_error'),
+                 'qr_enabled':manifest.get('drive_qr_enabled'),'share_warning':manifest.get('drive_share_warning'),
+                 'assets':relevant})
         if path.startswith('/api/session/') and path.endswith('/status'):
             sid=path.split('/')[3] if len(path.split('/'))>3 else ''
             if not sid.replace('-','').isalnum(): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
@@ -4229,6 +4247,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc: return self.send_json({'ok':False,'error':str(exc)},400)
         if path == '/api/google-drive/disconnect':
             return self.send_json({'ok':True,**google_drive.disconnect()})
+        if path == '/api/google-drive/test':
+            result=google_drive.diagnose()
+            return self.send_json({'ok':bool(result.get('verified')),'diagnostic':result},
+                                  200 if result.get('verified') else 503)
         if path == '/api/google-drive/retry':
             if not google_drive.status().get('connected'):
                 return self.send_json({'ok':False,'error':'Google Drive belum terhubung. Hubungkan ulang akun di Pengaturan Umum.'},409)
