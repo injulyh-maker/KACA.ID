@@ -578,8 +578,12 @@ def _google_drive_worker():
                     drive_jobs[job_id]=job; _save_drive_jobs()
                 _set_drive_manifest(job,job['status'],error=job['error'])
                 if job['status']=='pending':
-                    time.sleep(min(300, max(30, job['attempts']*30)))
-                    drive_jobs_queue.put(job_id)
+                    # Release this worker immediately so an expired token or
+                    # failed upload cannot stall every customer's next session.
+                    delay=min(300, max(30, job['attempts']*30))
+                    retry=threading.Timer(delay,lambda jid=job_id: drive_jobs_queue.put(jid))
+                    retry.daemon=True
+                    retry.start()
             except Exception as nested: print('[GOOGLE_DRIVE_QUEUE_ERROR]',repr(nested),flush=True)
         finally:
             drive_jobs_queue.task_done()
