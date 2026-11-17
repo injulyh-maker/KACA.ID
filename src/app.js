@@ -777,7 +777,7 @@ async function renderVideoCapture(){
        gate.querySelector('#dokuCheckoutProgress').textContent='Pembayaran '+st.status+'. Batalkan lalu coba transaksi baru.';
        clearInterval(timer);
      } else {
-       gate.querySelector('#dokuCheckoutProgress').textContent='Menunggu verifikasi server ${checkout.provider==='midtrans'?'Midtrans':'DOKU'}… Invoice '+checkout.invoice;
+       gate.querySelector('#dokuCheckoutProgress').textContent='Menunggu verifikasi server '+(checkout.provider==='midtrans'?'Midtrans':'DOKU')+'… Invoice '+checkout.invoice;
      }
    }catch(e){gate.querySelector('#dokuCheckoutProgress').textContent='Pemeriksaan pembayaran: '+e.message;}finally{polling=false;}};
    const timer=setInterval(check,checkout.provider==='midtrans'?5000:10000);void check();return;
@@ -906,7 +906,7 @@ let selectedTransactionMethod='',redeemedVoucherCode='',paidQrisInvoice='',captu
        gate.querySelector('#dokuCheckoutProgress').textContent='Pembayaran '+st.status+'. Batalkan lalu coba transaksi baru.';
        clearInterval(timer);
      } else {
-       gate.querySelector('#dokuCheckoutProgress').textContent='Menunggu verifikasi server ${checkout.provider==='midtrans'?'Midtrans':'DOKU'}… Invoice '+checkout.invoice;
+       gate.querySelector('#dokuCheckoutProgress').textContent='Menunggu verifikasi server '+(checkout.provider==='midtrans'?'Midtrans':'DOKU')+'… Invoice '+checkout.invoice;
      }
    }catch(e){gate.querySelector('#dokuCheckoutProgress').textContent='Pemeriksaan pembayaran: '+e.message;}finally{polling=false;}};
    const timer=setInterval(check,checkout.provider==='midtrans'?5000:10000);void check();return;
