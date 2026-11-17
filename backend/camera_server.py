@@ -3616,7 +3616,7 @@ class Handler(BaseHTTPRequestHandler):
               'poster_url':f'http://127.0.0.1:{PORT}/api/video/{vid}/poster.jpg',
               'drive_status':job.get('status') or 'local_only',
               'drive_url':job.get('url'), 'drive_error':job.get('error'),
-              'drive_share_warning':job.get('share_warning'),
+              'drive_share_warning':job.get('share_warning'), 'web_url':job.get('web_url'), 'share_url':_preferred_share_url({'web_url':job.get('web_url'),'drive_url':job.get('url')}),
               'qr_available':bool(not job.get('share_warning') and qr_path and os.path.isfile(qr_path)),
               'qr_url':f'http://127.0.0.1:{PORT}/api/video/{vid}/qr.png'})
         video_poster_match=re.fullmatch(r'/api/video/([a-f0-9]{12})/poster\.jpg',path)
@@ -4123,6 +4123,57 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length) or b'{}')
         except Exception:
             data = {}
+        if path == '/api/cloud/media-policy':
+            mode=str(data.get('mode') or 'local')
+            share=str(data.get('share') or 'drive')
+            if mode not in ('local','drive','web','both') or share not in ('web','drive'):
+                return self.send_json({'ok':False,'error':'Pilihan penyimpanan tidak valid.'},400)
+            if share=='web' and mode not in ('web','both'):
+                return self.send_json({'ok':False,'error':'Aktifkan web storage untuk QR web.'},400)
+            media_storage_policy.update({'mode':mode,'share':share})
+            _persist_media_policy()
+            if _drive_upload_enabled():
+                with drive_jobs_lock:
+                    waiting=[id for id,job in drive_jobs.items() if job.get('status')=='waiting_policy']
+                    for id in waiting:
+                        job=drive_jobs[id]
+                        job['status']='pending' if google_drive.status().get('connected') else 'waiting_auth'
+                        drive_jobs[id]=job
+                    if waiting:_save_drive_jobs()
+                for id in waiting:
+                    if google_drive.status().get('connected'):drive_jobs_queue.put(id)
+            return self.send_json({'ok':True,**media_storage_policy})
+        if path == '/api/cloud/web-share':
+            sid=str(data.get('session_id') or '')
+            video=bool(data.get('video',False))
+            url=str(data.get('url') or '')
+            parsed=urlparse(url)
+            if (parsed.scheme!='https' or parsed.hostname!='kacastudio.id' or
+                not re.fullmatch(r'/session/[A-Za-z0-9_-]{32,80}',parsed.path) or parsed.query or parsed.fragment):
+                return self.send_json({'ok':False,'error':'Tautan hasil web tidak valid.'},400)
+            if not re.fullmatch(r'[A-Za-z0-9_-]{6,100}',sid):
+                return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
+            if video:
+                vid=sid.removeprefix('video-')
+                with drive_jobs_lock:
+                    job=dict(drive_jobs.get(vid) or {})
+                    if not job or job.get('kind')!='video':
+                        return self.send_json({'ok':False,'error':'Video belum ada.'},404)
+                    job['web_url']=url
+                    _write_video_drive_qr(job)
+                    drive_jobs[vid]=job
+                    _save_drive_jobs()
+                return self.send_json({'ok':True,'web_url':url,'qr_available':bool(job.get('qr_path'))})
+            manifest=read_manifest(sid)
+            if not manifest:return self.send_json({'ok':False,'error':'Sesi foto tidak ditemukan.'},404)
+            manifest['web_url']=url
+            manifest['share_url']=_preferred_share_url(manifest)
+            if media_storage_policy.get('share')=='web':
+                _write_session_qr(manifest)
+                try:_refresh_drive_qr_output(manifest)
+                except Exception as exc:print('[WEB_QR_PRINT_WARNING]',repr(exc),flush=True)
+            write_manifest(manifest)
+            return self.send_json({'ok':True,'web_url':url,'qr_available':bool(manifest.get('drive_qr_available'))})
         if path == '/api/retention/config':
             try:
                 return self.send_json({'ok': True, **session_retention.set(data)})
