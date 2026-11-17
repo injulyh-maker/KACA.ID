@@ -893,6 +893,13 @@ def audit_log(limit:int=Query(default=50,le=200),u=Depends(admin_auth)):
     with closing_sql() as con:return {'items':many(con,'SELECT * FROM audit ORDER BY created_at DESC LIMIT ?',(limit,))}
 
 
+# Register gallery routes only after all authentication/scope helpers exist.
+from cloud_control.web_gallery import attach_gallery
+attach_gallery(app,data=DATA,transaction=transaction,closing_sql=closing_sql,
+               user_auth=user_auth,agent_auth=agent_auth,scope_booth=scope_booth,
+               unix=unix,public_origin=PUBLIC_CLOUD_ORIGIN)
+
+
 def create_superadmin(email,name,password):
     if len(password)<12:raise ValueError('Admin password minimal 12 karakter')
     email=email.strip().lower()

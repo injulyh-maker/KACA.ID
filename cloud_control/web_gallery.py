@@ -59,7 +59,7 @@ class BoothPreference(BaseModel):
 def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth, scope_booth, unix, public_origin):
     media_root=(Path(data)/'gallery-media').resolve()
     media_root.mkdir(parents=True,exist_ok=True)
-    with transaction() as db:
+    with closing_sql() as db:
         db.executescript('''
         CREATE TABLE IF NOT EXISTS gallery_brands(
           owner_id TEXT PRIMARY KEY REFERENCES users(id),
