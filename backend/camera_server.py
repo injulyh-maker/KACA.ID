@@ -4228,30 +4228,62 @@ class Handler(BaseHTTPRequestHandler):
                 if not voucher: return self.send_json({'ok':False,'error':'Voucher tidak ditemukan.'},404)
                 voucher['active']=bool(data.get('active',False)); _save_vouchers()
                 return self.send_json({'ok':True,'voucher':_voucher_public(voucher),'status':_voucher_status(voucher)})
+        if path == '/api/qris/pricing':
+            try:
+                price=int(data.get('base_price',0))
+                value=int(data.get('discount_value',0))
+                kind=str(data.get('discount_type') or 'nominal')
+                if not 0<=price<=999999999999:raise ValueError('Harga harus Rp0 atau lebih dan dalam batas nominal teknis.')
+                if kind not in ('nominal','percent'):raise ValueError('Jenis diskon tidak valid.')
+                if value<0 or value>999999999999:raise ValueError('Nilai diskon tidak valid.')
+                if kind=='percent' and value>100:raise ValueError('Diskon persen maksimal 100%.')
+                qris_config.update({'base_price':price,'amount':price,'discount_type':kind,'discount_value':value})
+                _save_qris_configuration()
+                return self.send_json({'ok':True,**_payment_quote()})
+            except (TypeError,ValueError) as exc:return self.send_json({'ok':False,'error':str(exc)},400)
+        if path == '/api/qris/image/delete':
+            try:
+                if os.path.isfile(QRIS_IMAGE_PATH):os.unlink(QRIS_IMAGE_PATH)
+                if qris_config.get('mode','static_manual')=='static_manual':
+                    qris_config['mode']='disabled'
+                    _save_qris_configuration()
+                return self.send_json({'ok':True,'static_image_available':False,'mode':qris_config.get('mode','disabled')})
+            except OSError as exc:return self.send_json({'ok':False,'error':str(exc)},500)
         if path == '/api/qris/gateway/config':
             try:
-                mode = str(data.get('mode') or 'static_manual')
-                if mode not in ('static_manual', 'doku_checkout'):
-                    raise ValueError('Metode QRIS tidak dikenal.')
-                if mode == 'doku_checkout':
-                    doku = doku_qris.configure(data)
+                mode=str(data.get('mode') or 'disabled')
+                if mode not in ('disabled','static_manual','doku_checkout','midtrans_snap'):
+                    raise ValueError('Mode pembayaran QRIS tidak dikenali.')
+                if mode=='static_manual' and not os.path.isfile(QRIS_IMAGE_PATH):
+                    raise ValueError('Unggah gambar QRIS statis sebelum mengaktifkannya.')
+                if mode=='doku_checkout':
+                    # Setting this mode turns off the static and Midtrans methods.
+                    doku=doku_qris.configure(data)
+                    midtrans=midtrans_snap.public_config()
+                elif mode=='midtrans_snap':
+                    midtrans=midtrans_snap.configure(data)
+                    doku=doku_qris.public_config()
                 else:
-                    doku = doku_qris.public_config()
-                qris_config['mode'] = mode
-                with open(qris_config_path + '.tmp', 'w', encoding='utf-8') as f:
-                    json.dump(qris_config, f, ensure_ascii=False, indent=2)
-                os.replace(qris_config_path + '.tmp', qris_config_path)
-                return self.send_json({'ok': True, 'mode': mode, 'doku': doku})
-            except Exception as exc:
-                return self.send_json({'ok': False, 'error': str(exc)}, 400)
+                    doku=doku_qris.public_config()
+                    midtrans=midtrans_snap.public_config()
+                qris_config['mode']=mode
+                _save_qris_configuration()
+                return self.send_json({'ok':True,'mode':mode,'doku':doku,'midtrans':midtrans})
+            except Exception as exc:return self.send_json({'ok':False,'error':str(exc)},400)
         if path == '/api/qris/checkout/create':
             try:
-                if qris_config.get('mode') != 'doku_checkout':
-                    raise ValueError('Mode DOKU QRIS belum aktif.')
-                amount = int(qris_config.get('amount') or 0)
-                return self.send_json({'ok': True, **doku_qris.create(amount)})
+                mode=qris_config.get('mode','static_manual')
+                if mode not in ('doku_checkout','midtrans_snap'):
+                    raise ValueError('Aktifkan salah satu QRIS dinamis pada menu Pembayaran.')
+                amount=_payment_quote()['amount']
+                if amount==0:
+                    return self.send_json({'ok':True,'free':True,'provider':'none','amount':0,
+                                           'message':'Harga setelah diskon Rp0. Gateway tidak digunakan.'})
+                if mode=='doku_checkout':checkout=doku_qris.create(amount)
+                else:checkout=midtrans_snap.create(amount)
+                return self.send_json({'ok':True,**checkout})
             except Exception as exc:
-                return self.send_json({'ok': False, 'error': str(exc)}, 400)
+                return self.send_json({'ok':False,'error':str(exc)},400)
         if path == '/api/whatsapp/fonnte/config':
             try: return self.send_json({'ok': True, **fonnte_gateway.configure(data.get('token'))})
             except Exception as exc: return self.send_json({'ok': False, 'error': str(exc)}, 400)
@@ -4290,11 +4322,15 @@ class Handler(BaseHTTPRequestHandler):
                     arr=cv2.imdecode(np.frombuffer(raw,dtype=np.uint8),cv2.IMREAD_UNCHANGED) if cv2 is not None else None
                     if arr is None: raise ValueError('Gambar QRIS tidak dapat dibaca.')
                     cv2.imwrite(QRIS_IMAGE_PATH,arr)
-                if not os.path.isfile(QRIS_IMAGE_PATH) and qris_config.get('mode') != 'doku_checkout': raise ValueError('Unggah gambar QRIS terlebih dahulu.')
-                qris_config.update({'merchant_name':merchant,'instructions':instructions or 'Scan QRIS, lalu tunjukkan bukti pembayaran kepada operator.','amount':amount,'updated_at':datetime.datetime.now().isoformat(timespec='seconds')})
-                with open(qris_config_path+'.tmp','w',encoding='utf-8') as qf: json.dump(qris_config,qf,ensure_ascii=False,indent=2)
-                os.replace(qris_config_path+'.tmp',qris_config_path)
-                return self.send_json({'ok':True,'configured':True,'mode':'static_manual'})
+                if not os.path.isfile(QRIS_IMAGE_PATH) and qris_config.get('mode','static_manual') == 'static_manual': raise ValueError('Unggah gambar QRIS sebelum mengaktifkan mode statis.')
+                qris_config.update({'merchant_name':merchant,'instructions':instructions or 'Scan QRIS, lalu tunjukkan bukti pembayaran kepada operator.','updated_at':datetime.datetime.now().isoformat(timespec='seconds')})
+                # Backward-compatible nominal only on older versions that have no
+                # central pricing yet; never override the discount with a QR upload.
+                if 'base_price' not in qris_config:
+                    qris_config.update({'base_price':amount,'amount':amount})
+                _save_qris_configuration()
+                return self.send_json({'ok':True,'configured':os.path.isfile(QRIS_IMAGE_PATH),
+                                       'mode':qris_config.get('mode','static_manual')})
             except Exception as exc: return self.send_json({'ok':False,'error':str(exc)},400)
         if path == '/api/google-drive/config':
             try:
