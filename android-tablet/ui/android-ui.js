@@ -169,13 +169,13 @@ function bindAndroidPrinter(){
  q('androidPaper')?.addEventListener('change',persist);q('androidPrintFit')?.addEventListener('change',persist);
  q('androidPrintNow')?.addEventListener('click',()=>{persist();native.printLastPhoto(settings.printPaper,settings.printFit);});
  q('androidPrinterScan')?.addEventListener('click',()=>{
-  try{const d=JSON.parse(native.printerServices()),names=d.services||[];q('androidPrinterReport').innerHTML=`<b>${d.available?'Fitur Print Android tersedia':'Print Android tidak tersedia'}</b><p>${names.length?'Layanan cetak terpasang: '+names.map(esc).join(', '):'Belum terdeteksi layanan cetak tambahan.'}</p><small>${esc(d.note||d.error||'Printer fisik akan dicari dari dialog cetak.')}</small>`;}
+  try{const d=JSON.parse(native.printerServices()),names=d.services||[];q('androidPrinterReport').innerHTML=`<b>${d.available?'Fitur Print Android tersedia':'Print Android tidak tersedia'}</b><p>${names.length?'Layanan cetak terpasang: '+names.map(esc).join(', '):'Belum terdeteksi layanan cetak tambahan.'}</p><small>${esc(d.note||d.error||'Printer fisik akan dicari dari dialog cetak.')}</small>`;const attached=Array.isArray(d.usbPrinters)?d.usbPrinters:[];if(attached.length){const note=document.createElement('p');note.textContent='Printer USB terdeteksi: '+attached.map(p=>(p.name||'Printer USB')+' ['+p.vendorId+':'+p.productId+']').join(', ')+'. Cetak tetap memerlukan Print Service Android yang mendukung model printer.';q('androidPrinterReport').append(note);}}
   catch(e){q('androidPrinterReport').textContent='Gagal membaca layanan cetak: '+e.message;}
  });
  q('androidPrintSettings')?.addEventListener('click',()=>native.openPrintSettings());
 }
 function androidHardwareFields(){
- return `<div class="android-settings-section"><h4>Deteksi Kamera & DSLR USB</h4><p class="muted">Memeriksa kamera Camera2 dan kamera PTP/UVC yang terhubung melalui USB OTG. Pengambilan gambar DSLR via PTP belum tersedia.</p><button class="btn secondary" id="androidCameraScan">Deteksi Kamera & USB</button><div class="android-device-report" id="androidCameraReport" role="status">Tekan tombol deteksi untuk membaca perangkat yang tersambung.</div></div>`;
+ return `<div class="android-settings-section"><h4>Deteksi Kamera & DSLR USB</h4><p class="muted">Memeriksa kamera Camera2 dan kamera PTP/UVC yang terhubung melalui USB OTG. Pemotretan JPEG lewat PTP standar kini dapat diuji bila kamera mendukung. Live View dan RAW vendor masih belum tersedia.</p><button class="btn secondary" id="androidCameraScan">Deteksi Kamera & USB</button><div class="android-device-report" id="androidCameraReport" role="status">Tekan tombol deteksi untuk membaca perangkat yang tersambung.</div></div>`;
 }
 function scanAndroidHardware(){
  const target=document.getElementById('androidCameraReport');if(!target)return;
@@ -275,6 +275,6 @@ document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=
 let drawerBtn=document.createElement('button');drawerBtn.id='androidDrawerToggle';drawerBtn.textContent='☰ Menu';drawerBtn.onclick=()=>document.body.classList.toggle('android-drawer-open');document.body.appendChild(drawerBtn);
 $('#kacaRecoverMenu')?.addEventListener('click',dashboard);
 $('#fullscreenToggle')?.addEventListener('click',()=>native.toggleFullscreen());
-$('#version').textContent='v0.9.92 Android responsive beta';
+$('#version').textContent='v0.9.93 Android USB/PTP beta';
 document.body.classList.add('android-tablet-ui');document.body.classList.remove('kaca-booting');dashboard();
 })();
