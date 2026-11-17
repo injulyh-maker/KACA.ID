@@ -47,6 +47,25 @@ final class AndroidPhotoPrinter {
                 names.put(label==null?service.serviceInfo.packageName:label.toString());
             }
             result.put("services",names);
+            // USB enumeration identifies hardware only, not a working print driver.
+            // Actual output still uses Android PrintManager / installed PrintService.
+            JSONArray attached=new JSONArray();
+            android.hardware.usb.UsbManager usb=(android.hardware.usb.UsbManager)
+                activity.getSystemService(Context.USB_SERVICE);
+            if(usb!=null)for(android.hardware.usb.UsbDevice d:usb.getDeviceList().values()){
+                boolean printer=d.getDeviceClass()==android.hardware.usb.UsbConstants.USB_CLASS_PRINTER;
+                for(int i=0;i<d.getInterfaceCount();i++){
+                    printer|=d.getInterface(i).getInterfaceClass()==android.hardware.usb.UsbConstants.USB_CLASS_PRINTER;
+                }
+                if(!printer)continue;
+                JSONObject row=new JSONObject();
+                row.put("name",d.getProductName()==null?"Printer USB":d.getProductName());
+                row.put("vendorId",String.format(java.util.Locale.ROOT,"%04X",d.getVendorId()));
+                row.put("productId",String.format(java.util.Locale.ROOT,"%04X",d.getProductId()));
+                row.put("permission",usb.hasPermission(d));
+                attached.put(row);
+            }
+            result.put("usbPrinters",attached);
             result.put("note","Printer fisik dipilih/ditemukan melalui dialog Cetak Android; daftar ini hanya layanan cetak terpasang, bukan konfirmasi koneksi printer.");
         }catch(Exception e){try{result.put("available",false);result.put("error",e.getMessage());}catch(Exception ignored){}}
         return result;
