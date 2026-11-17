@@ -49,6 +49,41 @@ class GoogleDriveManager:
         return {'configured': bool(cfg.get('client_id') and cfg.get('client_secret')), 'connected': connected,
                 'client_id': cfg.get('client_id'), 'account_email': cfg.get('account_email'), 'root_folder_id': cfg.get('root_folder_id')}
 
+    def diagnose(self):
+        """Verify the saved refresh token against Google's API (not just local state).
+
+        Never return OAuth credentials. A Drive API response is the only proof
+        that this particular booth account can currently authenticate.
+        """
+        state=self.status()
+        result={'configured':state['configured'],'connected':state['connected'],
+                'account_email':state.get('account_email'),'verified':False}
+        if not state['configured']:
+            result['error']='Google Drive belum dikonfigurasi. Masukkan Client ID dan Client Secret.'
+            return result
+        if not state['connected']:
+            result['error']='Akun belum terhubung. Gunakan Simpan & Hubungkan Google Drive.'
+            return result
+        try:
+            info=self._api('GET','/about',params={'fields':'user(emailAddress)'})
+            email=(info.get('user') or {}).get('emailAddress')
+            if email:
+                result['account_email']=email
+                cfg=self._read()
+                if cfg.get('account_email')!=email:
+                    cfg['account_email']=email
+                    self._write(cfg)
+            # Read-only listing also checks whether the selected OAuth scopes
+            # allow this application to access its own Drive files.
+            self._api('GET','/files',params={'pageSize':1,'fields':'nextPageToken,files(id,name)'})
+            result['verified']=True
+            result['message']='Token dan izin Google Drive terverifikasi. Buat sesi foto uji untuk menguji pembuatan folder dan upload.'
+        except Exception as exc:
+            result['error']=str(exc)
+            result['connected']=False  # Verification failed; local token may still exist.
+            result['message']='Token tersimpan tetapi permintaan API gagal. Hubungkan ulang jika izin atau refresh token kedaluwarsa.'
+        return result
+
     def auth_url(self):
         cfg = self._read()
         if not cfg.get('client_id') or not cfg.get('client_secret'):
