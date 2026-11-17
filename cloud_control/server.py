@@ -148,7 +148,7 @@ def init_db():
           booth_id TEXT, detail TEXT, created_at INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS plans (
-          days INTEGER PRIMARY KEY CHECK(days IN (30,90,365)),
+          days INTEGER PRIMARY KEY CHECK(days IN (1,30,90,365)),
           price_idr INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS auth_mail_tokens (
@@ -162,7 +162,21 @@ def init_db():
           captured_at INTEGER NOT NULL
         );
         ''')
-            for days in (30,90,365):
+            # Legacy plans table disallowed 1-day rows: rebuild transactionally while
+            # retaining all existing plan prices and update timestamps.
+            plan_schema=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='plans'").fetchone()
+            if plan_schema and 'CHECK(days IN (30,90,365))' in (plan_schema['sql'] or ''):
+                con.execute('BEGIN IMMEDIATE')
+                try:
+                    con.execute('ALTER TABLE plans RENAME TO plans_old')
+                    con.execute('CREATE TABLE plans (days INTEGER PRIMARY KEY CHECK(days IN (1,30,90,365)), price_idr INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)')
+                    con.execute('INSERT INTO plans SELECT days,price_idr,updated_at FROM plans_old')
+                    con.execute('DROP TABLE plans_old')
+                    con.execute('COMMIT')
+                except Exception:
+                    con.execute('ROLLBACK')
+                    raise
+            for days in (1,30,90,365):
                 con.execute('INSERT OR IGNORE INTO plans(days,price_idr,updated_at) VALUES(?,?,?)',(days,0,0))
             usercols=[x['name'] for x in con.execute('PRAGMA table_info(users)').fetchall()]
             if 'email_verified_at' not in usercols:
@@ -321,7 +335,7 @@ def admin_plans(u=Depends(admin_auth)):
 
 @app.post('/api/admin/plans')
 def set_plan_price(body:PlanPrice,u=Depends(admin_auth)):
-    if body.days not in (30,90,365):fail('Durasi paket tidak didukung',400)
+    if body.days not in (1,30,90,365):fail('Durasi paket tidak didukung',400)
     with transaction() as con:
         con.execute('UPDATE plans SET price_idr=?,updated_at=? WHERE days=?',(body.price_idr,unix(),body.days))
         audit(con,u['id'],'plan.price_updated',detail=f'{body.days} days')
