@@ -361,6 +361,31 @@ def _save_drive_jobs():
         with open(tmp, 'w', encoding='utf-8') as _f: json.dump(drive_jobs, _f, ensure_ascii=False, indent=2)
         os.replace(tmp, DRIVE_JOBS_PATH)
 
+def _resume_folder_assets(session_id):
+    """Wake assets only when their session has a real Drive folder.
+
+    A single Drive worker must never block for minutes waiting for one session:
+    that previously starved QR uploads and every later customer session.
+    """
+    manifest = read_manifest(session_id) or {}
+    if not manifest.get('drive_folder_id') or not google_drive.status().get('connected'):
+        return 0
+    resumed = []
+    with drive_jobs_lock:
+        for jid, job in drive_jobs.items():
+            if (job.get('kind') == 'asset' and job.get('session_id') == session_id
+                    and job.get('status') == 'waiting_folder'
+                    and os.path.isfile(job.get('local_path') or '')):
+                job['status'] = 'pending'
+                job['error'] = None
+                drive_jobs[jid] = job
+                resumed.append(jid)
+        if resumed: _save_drive_jobs()
+    for jid in resumed: drive_jobs_queue.put(jid)
+    if resumed: print('[GOOGLE_DRIVE_ASSETS_RESUMED]', session_id, len(resumed), flush=True)
+    return len(resumed)
+
+
 def _set_drive_manifest(job, status, url=None, error=None):
     sid = job.get('session_id')
     if not sid: return
@@ -384,16 +409,10 @@ def _set_drive_manifest(job, status, url=None, error=None):
             write_manifest(manifest)
             folder = manifest.get('local_archive_path')
             if folder and os.path.isdir(folder): _write_local_session_info(manifest)
-            refreshed = _refresh_drive_qr_output(manifest) if manifest.get('drive_url') else False
-            if refreshed and status == 'ready' and manifest.get('drive_folder_id'):
-                try:
-                    final_dir = os.path.join(folder, 'Final_Results')
-                    target = os.path.join(final_dir, 'Hasil_Frame.jpg')
-                    if os.path.isfile(target):
-                        final_id = google_drive.ensure_folder('Final_Results', manifest['drive_folder_id'])
-                        google_drive._upload_resumable(target, final_id)
-                except Exception as upload_exc:
-                    print('[GOOGLE_DRIVE_FRAME_QR_REUPLOAD_ERROR]', repr(upload_exc), flush=True)
+            # QR-overlaid output is uploaded as its own asset, rather than re-uploading
+            # Hasil_Frame.jpg without QR or blocking the Drive worker on an extra upload.
+            if manifest.get('drive_url'):
+                _refresh_drive_qr_output(manifest)
     except Exception as exc: print('[GOOGLE_DRIVE_MANIFEST_WARNING]', repr(exc), flush=True)
 
 def enqueue_drive_job(kind, local_path, folder_name, reference_id, session_id=None, event_id=None):
@@ -424,18 +443,19 @@ def enqueue_drive_asset_job(session_id, local_path, relative_path):
         old = drive_jobs.get(job_id, {})
         if old.get('status') in ('ready', 'uploading', 'pending'):
             return dict(old)
+        manifest = read_manifest(session_id) or {}
+        connected = google_drive.status().get('connected')
+        status = 'pending' if connected and manifest.get('drive_folder_id') else ('waiting_folder' if connected else 'waiting_auth')
         job = {'id':job_id,'kind':'asset','local_path':os.path.abspath(local_path),
                'relative_path':str(relative_path).replace('\\','/'),
-               'folder_name':'','session_id':session_id,'status':'pending',
+               'folder_name':'','session_id':session_id,'status':status,
                'attempts':int(old.get('attempts',0) or 0),'updated_at':datetime.datetime.now().isoformat(timespec='seconds')}
         drive_jobs[job_id] = job
         _save_drive_jobs()
-    if google_drive.status().get('connected'):
+    if job['status'] == 'pending':
         drive_jobs_queue.put(job_id)
-    else:
-        with drive_jobs_lock:
-            drive_jobs[job_id]['status'] = 'waiting_auth'
-            _save_drive_jobs()
+    # waiting_folder is resumed by successful session-folder provisioning.
+    # waiting_auth is resumed after OAuth is reconnected.
     return dict(job)
 
 def _write_video_drive_qr(job):
@@ -471,25 +491,23 @@ def _google_drive_worker():
             _set_drive_manifest(job,'uploading')
             if job.get('kind') == 'asset':
                 sid = job.get('session_id')
-                folder_id = None
-                for _ in range(600):
-                    current_manifest = read_manifest(sid) if sid else None
-                    folder_id = (current_manifest or {}).get('drive_folder_id')
-                    if folder_id:
-                        break
-                    if not google_drive.status().get('connected'):
-                        break
-                    time.sleep(1)
-                if not folder_id and google_drive.status().get('connected'):
-                    prepared = _provision_drive_session_folder(read_manifest(sid), job.get('folder_name') or os.path.basename((read_manifest(sid) or {}).get('local_archive_path','Sesi')))
-                    folder_id = prepared.get('folder_id')
-                    manifest = read_manifest(sid) or {}
-                    manifest.update({'drive_folder_id':folder_id,'drive_url':prepared.get('url'),
-                                     'drive_folder_status':'ready','drive_status':'uploading',
-                                     'drive_share_warning':prepared.get('share_warning')})
-                    _write_session_qr(manifest); write_manifest(manifest)
+                current_manifest = read_manifest(sid) if sid else None
+                folder_id = (current_manifest or {}).get('drive_folder_id')
                 if not folder_id:
-                    raise RuntimeError('Folder Google Drive sesi belum tersedia.')
+                    # Do not block this worker waiting for the folder. Future
+                    # sessions and their uploads must remain serviceable.
+                    with drive_jobs_lock:
+                        latest = dict(drive_jobs.get(job_id) or job)
+                        latest['status'] = 'waiting_folder'
+                        latest['error'] = 'Menunggu pembuatan folder Google Drive sesi.'
+                        drive_jobs[job_id] = latest
+                        _save_drive_jobs()
+                    if current_manifest and current_manifest.get('drive_folder_status') not in ('creating','ready'):
+                        current_manifest['drive_folder_status'] = 'creating'
+                        current_manifest['drive_status'] = 'provisioning'
+                        write_manifest(current_manifest)
+                        _start_session_drive_folder_provision(sid)
+                    continue
                 result = google_drive.upload_session_asset(job['local_path'], folder_id, job['relative_path'])
                 job.update({'status':'ready','result':result,'updated_at':datetime.datetime.now().isoformat(timespec='seconds'),'error':None})
                 with drive_jobs_lock:
@@ -506,6 +524,7 @@ def _google_drive_worker():
                     manifest['drive_status'] = 'uploading'
                 write_manifest(manifest)
                 print('[GOOGLE_DRIVE_ASSET_UPLOADED]', sid, job.get('relative_path'), flush=True)
+                continue  # Per-asset success must not masquerade as entire session ready.
             elif job.get('kind') == 'session':
                 # Legacy whole-folder jobs are retained for recovery of older sessions.
                 for _ in range(600):
@@ -566,10 +585,14 @@ def _google_drive_worker():
             drive_jobs_queue.task_done()
 
 for _job_id, _job in list(drive_jobs.items()):
-    if _job.get('status') in ('pending','uploading') and os.path.exists(_job.get('local_path','')):
-        _job['status']='pending'; drive_jobs_queue.put(_job_id)
-    elif _job.get('status') == 'waiting_auth' and google_drive.status().get('connected') and os.path.exists(_job.get('local_path','')):
-        _job['status']='pending'; drive_jobs_queue.put(_job_id)
+    if not os.path.exists(_job.get('local_path','')): continue
+    if _job.get('kind') == 'asset':
+        folder_id = (read_manifest(_job.get('session_id')) or {}).get('drive_folder_id')
+        if not folder_id:
+            _job['status'] = 'waiting_folder' if google_drive.status().get('connected') else 'waiting_auth'
+            continue
+    if _job.get('status') in ('pending','uploading','waiting_folder','waiting_auth') and google_drive.status().get('connected'):
+        _job['status']='pending';drive_jobs_queue.put(_job_id)
 
 def _event_storage_key(event_id):
     """Stable and safe folder ID. Event renames never move old customers' results."""
@@ -822,6 +845,8 @@ def _prepare_session_drive_folder(session_id):
         _refresh_drive_qr_output(latest)
     write_manifest(latest)
     _write_local_session_info(latest)
+    if latest.get('drive_folder_id'):
+        _resume_folder_assets(session_id)
     with session_lock:
         if active_session and active_session.get('id') == session_id:
             active_session.update({k:latest[k] for k in latest if k.startswith('drive_')})
