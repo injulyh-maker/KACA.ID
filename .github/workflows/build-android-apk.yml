@@ -53,7 +53,15 @@ jobs:
               assert required in java, 'Missing Android hardware bridge: '+required
           for required in ('PrintManager', 'PrintDocumentAdapter', 'PdfDocument', '"KACA_4R"', '"2R"', '"2R_STRIP"'):
               assert required in printer, 'Missing Print Framework support: '+required
-          print('Responsive settings, USB discovery, 4R/2R PDF print, audio controls verified')
+          ptp=Path('android-tablet/app/src/main/java/id/kaca/tablet/UsbPtpCamera.java').read_text()
+          for required in ('INITIATE_CAPTURE=0x100E', 'GET_OBJECT_HANDLES=0x1007', 'GET_OBJECT=0x1009', 'GET_OBJECT_INFO=0x1008', 'MAX_PAYLOAD', 'UsbDeviceConnection', 'byte[] captureJpeg()'):
+              assert required in ptp, 'Missing USB PTP support: '+required
+          for required in ('captureUsbPtp(int id)', 'probeUsbPtp(int id)', 'UsbManager.EXTRA_PERMISSION_GRANTED', 'requestPermission', 'combine(raw)', 'verifiedLicense()'):
+              assert required in java, 'Missing licensed USB camera flow: '+required
+          for required in ('ptpCameraSelect', 'native.captureUsbPtp', 'native.probeUsbPtp', 'onPtpReport'):
+              assert required in js, 'Missing DSLR capture UI: '+required
+          assert 'usbPrinters' in printer, 'Missing attached USB printer discovery'
+          print('Responsive settings, PTP capture, USB printer discovery, 4R/2R printing and audio verified')
           PY
       - name: Build APK for device testing
         working-directory: android-tablet
@@ -61,7 +69,7 @@ jobs:
       - name: Upload APK (TEST ONLY)
         uses: actions/upload-artifact@v4
         with:
-          name: KACA-ID-Android-Tablet-0.9.92-beta-APK
+          name: KACA-ID-Android-Tablet-0.9.93-beta-APK
           path: android-tablet/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

@@ -202,7 +202,13 @@ final class UsbPtpCamera implements AutoCloseable {
         while(System.currentTimeMillis()<deadline){
             if(Thread.currentThread().isInterrupted())throw new InterruptedException("Pemotretan USB dibatalkan.");
             Thread.sleep(800);
-            Set<Long> after=getHandles();
+            Set<Long> after;
+            try{after=getHandles();}
+            catch(IOException transientError){
+                // Cameras can report DeviceBusy while committing a JPEG to SD.
+                if(transientError.getMessage()!=null && transientError.getMessage().contains("0x2019"))continue;
+                throw transientError;
+            }
             for(Long handle:after){
                 if(before.contains(handle))continue;
                 if(!jpegObject(handle))continue;

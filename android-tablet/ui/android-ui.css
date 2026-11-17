@@ -186,3 +186,15 @@ html body.android-tablet-ui .android-action-row .btn{min-width:0;max-width:100%;
  html body.android-tablet-ui .android-settings-pane{padding:10px!important;margin-top:8px}
  html body.android-tablet-ui .main{padding-bottom:calc(55px + env(safe-area-inset-bottom))!important}
 }
+
+body.android-tablet-ui .android-ptp-hint{
+ position:absolute;left:6%;right:6%;top:19%;bottom:24%;
+ display:flex;align-items:center;justify-content:center;text-align:center;
+ pointer-events:none;padding:14px;color:#e7f0ff;background:#0b1529de;
+ border:1px solid #42587d;border-radius:12px;font-size:clamp(12px,1.6vw,18px);line-height:1.55;z-index:2;
+}
+body.android-tablet-ui .android-ptp-hint[hidden],
+body.android-tablet-ui #androidCaptureVideo[hidden]{display:none!important}
+body.android-tablet-ui #capturePreview .preview-start-button,
+body.android-tablet-ui #capturePreview .preview-bottom-controls{z-index:5}
+body.android-tablet-ui #ptpCameraSelect{max-width:100%;min-width:0}

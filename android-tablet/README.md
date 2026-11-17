@@ -24,3 +24,14 @@ Perangkat harus memiliki Android 13+ (API 33). Kamera Android bawaan menangani c
 - Foto hasil dapat dibagikan dan dicetak melalui layanan Android; sesi lisensi offline dan sinkronisasi metadata Cloud tetap menggunakan implementasi lama.
 
 **Batas kesetaraan:** belum tersedia pada Android: Canon/Nikon DSLR shutter/Live View terintegrasi, Google Drive media/QR dalam frame, Fonnte, sistem filter OpenCV lengkap, pencetakan otomatis tanpa dialog, dan remote-control desktop Windows. APK tidak boleh dinyatakan identik secara fungsional dengan Windows. Uji pada model Android, kamera, printer, dan Print Service yang ditargetkan wajib dilakukan sebelum rilis pelanggan.
+
+
+## v0.9.93 beta - USB/PTP device interoperability
+
+The Android USB Host path now detects the USB Still Image Class with BULK IN/OUT endpoints, requests permission, probes PTP GetDeviceInfo and InitiateCapture capability and, on devices accepting the standard operation, requests a capture, compares object handles and downloads a new JPEG. It never deletes files on the camera. The JPEG is saved to Originals and follows the existing photo frame/results and Cloud session metadata logic. A valid offline license is required to shoot. Capture Studio has a source selector (Android or DSLR USB/PTP), and the Device settings page has PTP probe/shutter test buttons. Connect with USB OTG and configure the camera for PTP mode and JPEG or RAW+JPEG.
+
+Limitations: proprietary Canon/Nikon/Sony vendor operations, camera-specific Live View, manual ISO/shutter/aperture settings, RAW-only capture and MTP interfaces without PTP are not covered. Physical model+firmware tests are essential. USB device IDs may change when reconnected.
+
+Printer detection lists USB Printer Class hardware alongside Android Print Services. Output still uses the Android PrintManager pathway for 4R, 2R standard or 2R strip. USB presence does not establish driver compatibility. For Wi-Fi/USB photo printers install a compatible Android vendor, IPP or Mopria Print Service and confirm the media size in the print dialog.
+
+Do not publish as a 100% feature-parity release without testing the intended camera, printer and tablet. A successful CI build only confirms static checks and compilation.
