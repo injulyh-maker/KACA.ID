@@ -4063,7 +4063,7 @@ class Handler(BaseHTTPRequestHandler):
             if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
             manifest=read_manifest(sid)
             if not manifest or not manifest.get('drive_qr_enabled'): return self.send_json({'ok':False,'error':'QR cetak tidak diaktifkan untuk sesi ini.'},404)
-            if not manifest.get('drive_url'): return self.send_json({'ok':False,'error':'Tautan Google Drive belum tersedia untuk QR cetak.'},409)
+            if not _preferred_share_url(manifest): return self.send_json({'ok':False,'error':'Tautan hasil Web/Drive belum tersedia untuk QR cetak.'},409)
             if not _refresh_drive_qr_output(manifest): return self.send_json({'ok':False,'error':manifest.get('print_qr_error') or 'JPG QR belum siap.'},409)
             write_manifest(manifest)
             self.stream_file(os.path.join(SESSIONS_DIR,sid,'output_print_qr.jpg'),'image/jpeg');return
