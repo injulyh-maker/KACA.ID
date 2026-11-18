@@ -90,6 +90,17 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertIn('KACA Poso',public.text)
         self.assertIn('Download Your Photos',public.text)
         self.assertIn('#cc8844',public.text)
+        # First capture: publish the original immediately, before the frame is rendered.
+        initial=io.BytesIO()
+        with zipfile.ZipFile(initial,'w',zipfile.ZIP_STORED) as z:
+            z.writestr('Foto Original/Foto-01.jpg',bytes([255,216,255])+b'first-original')
+        partial=self.client.post('/api/agent/gallery/'+sid+'/upload?kind=archive&mode=PHOTO',
+                                 content=initial.getvalue(),headers=self.bh)
+        self.assertEqual(partial.status_code,200,partial.text)
+        self.assertEqual(partial.json()['url'],reserved_url)
+        partial_state=self.client.get('/api/public/session/'+token+'/state').json()
+        self.assertEqual(partial_state['item_count'],1)
+        partial_revision=partial_state['revision']
         memory=io.BytesIO()
         with zipfile.ZipFile(memory,'w',zipfile.ZIP_STORED) as z:
             z.writestr('Photos/Foto_01_Original.jpg',bytes([255,216,255])+b'photo')
@@ -104,6 +115,7 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertEqual({entry['category'] for entry in entries.json()['items']},
                          {'original','frame','gif','live'})
         self.assertEqual(self.client.get('/api/public/session/'+token+'/state').json()['item_count'],4)
+        self.assertNotEqual(self.client.get('/api/public/session/'+token+'/state').json()['revision'],partial_revision)
         for entry in entries.json()['items']:
             self.assertEqual(self.client.get(entry['url']).status_code,200)
         rendered=self.client.get('/session/'+token)
