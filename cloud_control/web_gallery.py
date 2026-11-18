@@ -15,9 +15,10 @@ import secrets
 import sqlite3
 import time
 import uuid
+import zipfile
 
 from fastapi import Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 MODE_CHOICES={'local','drive','web','both'}
@@ -104,7 +105,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             'booth_id':row['booth_id'],'session_id':row['session_id'],
             'mode':row['mode'],'event_name':row['event_name'],
             'created_at':row['created_at'],'expires_at':row['expires_at'],
-            'url':public_origin+'/api/public/session/'+row['token'],
+            'url':public_origin+'/session/'+row['token'],
             'has_preview':bool(row['preview_path']),
             'has_archive':bool(row['archive_path']),
             'has_video':bool(row['video_path']),
@@ -331,38 +332,166 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             owner_id=booth['owner_id']
         return r,brand,owner_id
 
+    def _archive_items(row):
+        """Expose only recognized files from an uploaded ZIP without extracting paths."""
+        archive=_safe_file(row,'archive')
+        if not archive:return []
+        items=[]
+        try:
+            with zipfile.ZipFile(archive) as z:
+                for info in z.infolist():
+                    if len(items)>=80:break
+                    if info.is_dir() or info.file_size>150*1024*1024:continue
+                    name=info.filename.replace('\\','/')
+                    basename=name.rsplit('/',1)[-1]
+                    lower=name.lower()
+                    if lower.startswith('foto original/') and basename.lower().endswith(('.jpg','.jpeg')):
+                        category='original';mime='image/jpeg';label='Foto Original'
+                    elif lower.startswith('frame/') and basename.lower().endswith(('.jpg','.jpeg')):
+                        category='frame';mime='image/jpeg';label='Foto dalam Frame'
+                    elif lower.startswith('gif/') and basename.lower().endswith('.gif'):
+                        category='gif';mime='image/gif';label='GIF'
+                    elif lower.startswith('live photo dalam frame/') and basename.lower().endswith('.mp4'):
+                        category='live';mime='video/mp4';label='Live Photo'
+                    else:continue
+                    items.append({'filename':info.filename,'name':basename,'category':category,
+                                  'label':label,'mime':mime,'bytes':info.file_size})
+        except (OSError,zipfile.BadZipFile,RuntimeError):return []
+        return items
+
+    @app.get('/api/public/session/{token}/assets/{index}')
+    def public_archive_asset(token:str,index:int):
+        row,_,_=_token_lookup(token)
+        items=_archive_items(row)
+        if index<0 or index>=len(items):raise HTTPException(404,'File sesi tidak ditemukan.')
+        item=items[index]
+        archive=_safe_file(row,'archive')
+        if not archive:raise HTTPException(404,'Arsip sesi belum tersedia.')
+        def chunks():
+            with zipfile.ZipFile(archive) as z:
+                with z.open(item['filename']) as stream:
+                    remaining=item['bytes']
+                    while remaining>0:
+                        block=stream.read(min(65536,remaining))
+                        if not block:break
+                        remaining-=len(block)
+                        yield block
+        return StreamingResponse(chunks(),media_type=item['mime'],
+                 headers={'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'})
+
+    @app.get('/api/public/session/{token}/items')
+    def public_archive_items(token:str):
+        row,_,_=_token_lookup(token)
+        items=_archive_items(row)
+        return {'items':[{'label':item['label'],'category':item['category'],
+                          'name':item['name'],'url':'/api/public/session/'+token+'/assets/'+str(i)}
+                          for i,item in enumerate(items)]}
+
     @app.get('/session/{token}',response_class=HTMLResponse)
     @app.get('/api/public/session/{token}',response_class=HTMLResponse)
     def public_session(token:str):
         row,brand,owner_id=_token_lookup(token)
         label=html.escape(brand['title'])
         sub=html.escape(brand['subtitle'])
-        color=brand['accent'] if COLOR_RE.fullmatch(brand['accent']) else '#375EDB'
-        title=html.escape(row['event_name'] or 'Hasil Sesi')
-        safe_token=html.escape(token)
-        media=('video' if row['video_path'] and row['mode']=='VIDEO' else 'preview')
-        if _safe_file(row,media):
-            view=('<video controls playsinline preload="metadata" src="/api/public/session/'+safe_token+'/media"></video>'
-                  if media=='video' else '<img alt="Hasil foto sesi" src="/api/public/session/'+safe_token+'/media">')
-        else:view='<p>File hasil masih diproses.</p>'
-        logo=('<img class="brand-logo" alt="Logo studio" src="/api/public/brand/'+html.escape(owner_id)+'/logo">'
-              if brand['logo_mime'] else '')
-        body=f'''<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{label} — Hasil Sesi</title>
-<style>body{{font-family:system-ui,Arial,sans-serif;background:#f5f7fb;color:#101525;margin:0}}
-main{{max-width:960px;margin:40px auto;padding:24px}}header{{text-align:center;margin-bottom:22px}}
-.brand-logo{{width:88px;height:88px;object-fit:contain}}h1{{font-size:2rem;margin:10px 0}}
-.small{{color:#62708a}}.card{{background:white;border:1px solid #dde3ee;border-radius:22px;padding:22px;text-align:center;box-shadow:0 8px 30px #1720360d}}
-img:not(.brand-logo),video{{width:100%;max-height:70vh;object-fit:contain;border-radius:12px;background:#f1f3f9}}
-.actions{{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:20px}}
-a,button{{background:{color};color:white;border:0;border-radius:10px;padding:13px 20px;text-decoration:none;font-size:1rem;cursor:pointer}}
-@media print{{header,.actions,.small{{display:none}}body{{background:white}}main,.card{{margin:0;padding:0;border:0;box-shadow:none}}img{{max-height:none}}}}
-</style></head><body><main><header>{logo}<h1>{label}</h1><p class="small">{sub}</p></header>
-<section class="card"><h2>{title}</h2>{view}
-<div class="actions"><a href="/api/public/session/{safe_token}/download">Unduh Hasil</a><button onclick="window.print()">Cetak Foto</button></div>
-<p class="small">Tautan privat: siapa pun yang menerima link/QR ini dapat melihat hasil sampai kedaluwarsa.</p>
-</section></main></body></html>'''
-        return HTMLResponse(body,headers={'Cache-Control':'no-store','Content-Security-Policy':
+        accent=brand['accent'] if COLOR_RE.fullmatch(brand['accent']) else '#375EDB'
+        session_label=html.escape(row['event_name'] or 'Hasil Foto & Video')
+        public_url=public_origin+'/session/'+token
+        items=_archive_items(row)
+        cards=[]
+        for idx,item in enumerate(items):
+            kind=item['category']
+            src='/api/public/session/'+token+'/assets/'+str(idx)
+            if kind=='live':
+                view='<video controls playsinline preload="metadata" src="'+src+'"></video>'
+            else:
+                view='<img loading="lazy" alt="'+html.escape(item['label'])+'" src="'+src+'">'
+            cards.append('<article class="media-card" data-kind="'+kind+'">'+
+                         '<div class="media-preview">'+view+'</div>'+
+                         '<div class="media-info"><b>'+html.escape(item['label'])+'</b>'+
+                         '<span>'+html.escape(item['name'])+'</span>'+
+                         '<a class="download" download href="'+src+'">↓ Unduh</a></div></article>')
+        if not items and _safe_file(row,'preview'):
+            src='/api/public/session/'+token+'/media'
+            cards.append('<article class="media-card" data-kind="frame"><div class="media-preview">'+
+                         '<img alt="Foto dalam Frame" src="'+src+'"></div><div class="media-info"><b>Foto dalam Frame</b>'+
+                         '<a class="download" download href="'+src+'">↓ Unduh</a></div></article>')
+        if row['mode']=='VIDEO' and _safe_file(row,'video'):
+            src='/api/public/session/'+token+'/media'
+            cards.append('<article class="media-card" data-kind="video"><div class="media-preview">'+
+                         '<video controls playsinline src="'+src+'"></video></div><div class="media-info"><b>Video Sesi</b>'+
+                         '<a class="download" href="'+src+'" download>↓ Unduh Video</a></div></article>')
+        if not cards:
+            cards.append('<div class="empty">File sesi sedang dipersiapkan. Muat ulang setelah beberapa saat.</div>')
+        logo=('<img class="brand-logo" alt="Logo Studio" src="/api/public/brand/'+html.escape(owner_id)+'/logo">'
+              if brand['logo_mime'] else '<div class="brand-logo brand-fallback">K</div>')
+        page="""<!doctype html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>__BRAND__ — Hasil Sesi</title>
+<style>
+:root{--accent:__ACCENT__;--night:#111525;--panel:#22293a;--muted:#b5bfd3}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(115deg,#7dbafa,#98d2ff);
+font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:white}
+main{max-width:1040px;margin:0 auto;background:#141826;min-height:100vh;box-shadow:0 8px 60px #14204b35}
+.hero{padding:42px 22px 55px;text-align:center;background:linear-gradient(125deg,#0b175d,#342b68)}
+.brand-logo{width:88px;height:88px;object-fit:contain;margin:0 auto 16px;display:block}
+.brand-fallback{display:grid;place-items:center;font-size:52px;font-weight:900}
+h1{font-size:clamp(28px,4.5vw,46px);margin:12px 0 5px;letter-spacing:.3px}
+.hero p{color:#e0defd;margin:8px 0}.session{background:#ffffff18;border:1px solid #ffffff36;border-radius:15px;
+padding:16px;margin:20px auto 0;max-width:480px;font-size:13px;line-height:1.8}
+.content{padding:38px clamp(16px,5vw,52px) 72px;text-align:center}
+h2{font-size:clamp(22px,3vw,30px);margin:8px 0 14px}
+.sub{color:#d1d7e9;font-size:15px;line-height:1.7}
+.actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:26px 0 24px}
+.button,.download{display:inline-flex;justify-content:center;align-items:center;text-decoration:none;color:#fff;
+border:0;background:var(--accent);border-radius:12px;font-weight:700;padding:14px 20px;font-size:14px;cursor:pointer}
+.button.alt{background:#2b3345}.filters{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:25px 0}
+.filter{color:#eee;background:transparent;border:1px solid #596078;padding:11px 18px;border-radius:30px;cursor:pointer}
+.filter.active{border-color:var(--accent);background:var(--accent);font-weight:700}
+.message{background:linear-gradient(90deg,#fff2c6,#f8e79a);color:#874214;border-radius:13px;
+padding:22px;margin:26px 0;font-size:15px}
+.gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px;text-align:left}
+.media-card{background:#242c3b;border:1px solid #3a435b;border-radius:15px;overflow:hidden}
+.media-card[hidden]{display:none}.media-preview{height:310px;background:#282469;display:flex;align-items:center;justify-content:center}
+.media-preview img,.media-preview video{width:100%;height:100%;object-fit:contain}
+.media-info{padding:15px;display:flex;gap:9px;flex-direction:column;font-size:14px}
+.media-info span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.media-info .download{width:100%;margin-top:7px}.empty{grid-column:1/-1;padding:55px;color:var(--muted)}
+.privacy{color:#9ba5bf;margin:30px 0 0;font-size:12px;line-height:1.6}
+@media(max-width:650px){.gallery{grid-template-columns:1fr}.media-preview{height:270px}
+.hero{padding:30px 14px}.content{padding:26px 14px}.actions .button{flex:1}}
+</style></head><body><main>
+<header class="hero">__LOGO__<h1>__BRAND__</h1><p>__SUBTITLE__</p>
+<div class="session"><strong>__SESSION_NAME__</strong><div>Sesi: __SESSION_ID__</div></div></header>
+<section class="content"><h2>↓ Download Your Photos</h2>
+<p class="sub">Terima kasih telah berfoto bersama kami! Lihat, putar, dan unduh hasil foto atau video pilihan Anda.</p>
+<div class="actions"><a class="button" href="/api/public/session/__TOKEN__/download">↓ Download All Files</a>
+<button type="button" class="button alt" id="shareLink">↗ Bagikan Link</button></div>
+<div class="filters"><button class="filter active" data-filter="all">Semua</button>
+<button class="filter" data-filter="frame">Foto Frame</button>
+<button class="filter" data-filter="original">Original</button>
+<button class="filter" data-filter="gif">GIF</button>
+<button class="filter" data-filter="live">Live Photo</button>
+<button class="filter" data-filter="video">Video</button></div>
+<div class="message">♥ Pesan Spesial<br>Semoga momen indah ini menjadi kenangan yang berharga.</div>
+<div class="gallery">__CARDS__</div>
+<p class="privacy">Tautan ini bersifat privat: siapa pun yang memiliki link atau QR dapat melihat hasil sampai masa simpan berakhir.</p>
+</section></main>
+<script>
+document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{
+ const category=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));
+ document.querySelectorAll('.media-card').forEach(c=>c.hidden=category!=='all'&&c.dataset.kind!==category);
+}));
+document.getElementById('shareLink').addEventListener('click',async()=>{
+ if(navigator.share){try{await navigator.share({title:document.title,url:location.href});return;}catch(e){}}
+ try{await navigator.clipboard.writeText(location.href);alert('Link hasil berhasil disalin.');}
+ catch(e){prompt('Salin link hasil:',location.href);}
+});
+</script></body></html>"""
+        page=(page.replace('__ACCENT__',accent).replace('__BRAND__',label)
+               .replace('__SUBTITLE__',sub).replace('__SESSION_NAME__',session_label)
+               .replace('__SESSION_ID__',html.escape(row['session_id']))
+               .replace('__LOGO__',logo).replace('__TOKEN__',token)
+               .replace('__CARDS__',''.join(cards)))
+        return HTMLResponse(page,headers={'Cache-Control':'private,no-store','Content-Security-Policy':
             "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"})
 
     @app.get('/session-brand/{owner_id}/logo')
