@@ -1331,7 +1331,7 @@ def _layout_slots(session, count, W, H):
 
 def _blend_drive_qr(canvas, session):
     """Burn the current session's Drive-folder QR into the printable frame."""
-    if not session.get('drive_qr_enabled') or not session.get('drive_url'):
+    if not session.get('drive_qr_enabled') or not _preferred_share_url(session):
         return canvas
     layout = session.get('drive_qr_layout') or {}
     try:
@@ -1379,7 +1379,7 @@ def _refresh_drive_qr_output(session):
     """
     if not (session or {}).get('drive_qr_enabled'):
         return False
-    if not str(session.get('drive_url') or '').startswith('https://drive.google.com/'):
+    if not _preferred_share_url(session).startswith('https://'):
         return False
     sid = str(session.get('id') or '')
     if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}', sid):
@@ -1391,7 +1391,7 @@ def _refresh_drive_qr_output(session):
         return False
     try:
         # The result may be rerendered when the customer changes filters.
-        revision = str(session['drive_url']) + '|' + json.dumps(session.get('drive_qr_layout') or {},sort_keys=True)
+        revision = _preferred_share_url(session) + '|' + json.dumps(session.get('drive_qr_layout') or {},sort_keys=True)
         stamp = os.path.join(folder, 'output_print_qr.meta.json')
         fingerprint = hashlib.sha256(revision.encode('utf-8')).hexdigest()
         try:
@@ -3620,7 +3620,7 @@ class Handler(BaseHTTPRequestHandler):
               'drive_status':job.get('status') or 'local_only',
               'drive_url':job.get('url'), 'drive_error':job.get('error'),
               'drive_share_warning':job.get('share_warning'), 'web_url':job.get('web_url'), 'share_url':_preferred_share_url({'web_url':job.get('web_url'),'drive_url':job.get('url')}),
-              'qr_available':bool(not job.get('share_warning') and qr_path and os.path.isfile(qr_path)),
+              'qr_available':bool((media_storage_policy.get('share')=='web' or not job.get('share_warning')) and qr_path and os.path.isfile(qr_path)),
               'qr_url':f'http://127.0.0.1:{PORT}/api/video/{vid}/qr.png'})
         video_poster_match=re.fullmatch(r'/api/video/([a-f0-9]{12})/poster\.jpg',path)
         if video_poster_match:
@@ -3926,7 +3926,7 @@ class Handler(BaseHTTPRequestHandler):
             # Important recovery path: OAuth may complete after /finish has cleared
             # active_session. In that case the old callback cannot identify the finished
             # session, so status polling itself provisions its Drive folder and QR.
-            if (google_drive.status().get('connected') and not manifest.get('drive_folder_id')
+            if (_drive_upload_enabled() and google_drive.status().get('connected') and not manifest.get('drive_folder_id')
                     and manifest.get('drive_folder_status') in ('waiting_auth','error','pending',None)):
                 manifest['drive_folder_status']='creating'
                 manifest['drive_status']='provisioning'
@@ -3954,7 +3954,7 @@ class Handler(BaseHTTPRequestHandler):
             if not live_master_ready:
                 live_master = 'output_live.mp4' if _live_asset_exists('output_live.mp4') else ('output_live.webm' if _live_asset_exists('output_live.webm') else '')
                 live_master_ready=bool(live_master)
-            if still_ready and manifest.get('drive_qr_enabled') and manifest.get('drive_url'):
+            if still_ready and manifest.get('drive_qr_enabled') and _preferred_share_url(manifest):
                 qr_print=os.path.join(session_dir,'output_print_qr.jpg')
                 if not os.path.isfile(qr_print) or not manifest.get('print_qr_ready'):
                     if _refresh_drive_qr_output(manifest): write_manifest(manifest)
@@ -3968,7 +3968,7 @@ class Handler(BaseHTTPRequestHandler):
                     (archive_dir and candidate.startswith(archive_dir+os.sep))):
                     qr_candidates.append(candidate)
             qr_available=any(os.path.isfile(candidate) and os.path.getsize(candidate)>0 for candidate in qr_candidates)
-            return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available,'print_qr_ready':bool(manifest.get('drive_qr_enabled') and os.path.isfile(os.path.join(session_dir,'output_print_qr.jpg'))),'print_qr_error':manifest.get('print_qr_error') or manifest.get('drive_qr_embed_error')})
+            return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'web_url':manifest.get('web_url'),'share_url':_preferred_share_url(manifest),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available,'print_qr_ready':bool(manifest.get('drive_qr_enabled') and os.path.isfile(os.path.join(session_dir,'output_print_qr.jpg'))),'print_qr_error':manifest.get('print_qr_error') or manifest.get('drive_qr_embed_error')})
         if path.startswith('/api/session/') and path.endswith('/drive-diagnostic'):
             sid=path.split('/')[-2]
             if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid):return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
@@ -4376,12 +4376,12 @@ class Handler(BaseHTTPRequestHandler):
                 if kind=='video':
                     with drive_jobs_lock:job=dict(drive_jobs.get(sid) or {})
                     if job.get('kind')!='video':raise ValueError('Arsip video tidak ditemukan.')
-                    if job.get('share_warning'):raise ValueError('Folder video belum dapat dibuka publik.')
-                    url=str(job.get('url') or '')
+                    if media_storage_policy.get('share')=='drive' and job.get('share_warning'):raise ValueError('Folder video belum dapat dibuka publik.')
+                    url=_preferred_share_url({'web_url':job.get('web_url'),'drive_url':job.get('url')})
                 elif kind=='session':
                     manifest=read_manifest(sid)
                     if not manifest:raise ValueError('Sesi hasil tidak ditemukan.')
-                    url=str(manifest.get('drive_url') or manifest.get('drive_share_url') or '')
+                    url=_preferred_share_url(manifest)
                 else:raise ValueError('Jenis hasil tidak didukung.')
                 return self.send_json(fonnte_gateway.send(sid, data.get('phone'), url, data.get('consent')))
             except Exception as exc:
