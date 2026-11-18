@@ -64,7 +64,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   config._migratedCloudServer=true;
  }
  if(!config.lastObservedAt)config.lastObservedAt=0;
- try{outbox=JSON.parse(fs.readFileSync(outboxFile,'utf8'));if(!outbox.pending||!outbox.synced)throw Error('bad outbox')}catch{outbox={pending:{},synced:{}}}
+ try{outbox=JSON.parse(fs.readFileSync(outboxFile,'utf8'));if(!outbox.pending||!outbox.synced)throw Error('bad outbox')}catch{outbox={pending:{},synced:{}}}if(!outbox.webSynced||typeof outbox.webSynced!=='object')outbox.webSynced={};
  const deviceId=hardwareId(userDir);
  const save=()=>atomicJSON(configFile,config);
  if(config._migratedCloudServer){delete config._migratedCloudServer;save();}
@@ -84,7 +84,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
    return !!payload;
   }catch(e){lastError=e.message;return false;}
  };
- const status=()=>{const active=validOffline();const connected=active && lastSync>0 && Date.now()-lastSync<90000;return {connected,licenseActive:active,required:true,server:config.server||DEFAULT_CLOUD_ORIGIN,boothId:config.boothId||'',boothName:config.boothName||'',licenseExpires:config.licenseExpires||null,remoteUntil,shareThumbnails:!!config.shareThumbnails,lastSync,lastError};};
+ const status=()=>{const active=validOffline();const connected=active && lastSync>0 && Date.now()-lastSync<90000;return {connected,licenseActive:active,required:true,server:config.server||DEFAULT_CLOUD_ORIGIN,boothId:config.boothId||'',boothName:config.boothName||'',licenseExpires:config.licenseExpires||null,remoteUntil,shareThumbnails:!!config.shareThumbnails,storageMode:config.storageMode||'drive',shareProvider:config.shareProvider||'drive',lastSync,lastError};};
  const validServer=(value)=>{const u=new URL(String(value||''));if(!(u.protocol==='https:'||((u.hostname==='localhost'||u.hostname==='127.0.0.1')&&u.protocol==='http:')))throw Error('Server cloud harus HTTPS, kecuali localhost untuk uji');return u.origin;};
  const cloud=(route,opts)=>httpJSON(config.server+'/api'+route,{...opts,headers:{'X-Booth-Id':config.boothId||'','X-Booth-Key':config.boothKey||'',...(opts?.headers||{})}});
  async function activate({server,email,password,licenseCode,boothName}){
@@ -114,7 +114,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
    const pay=String(s.payment_method||'');
    // Never infer financial income by guessing current settings for historic sessions.
    const known=Number(s.payment_amount_idr??s.payment_amount??s.amount_idr??0);
-   const verified=(pay==='qris_doku'&&String(s.payment_verification||'').toLowerCase()==='success')||s.verified_paid===true;
+   const verified=(['qris_doku','qris_midtrans'].includes(pay)&&String(s.payment_verification||'').toLowerCase()==='success')||s.verified_paid===true;
    const item={id:sid,finished_at:s.finished_at||s.created_at||'',event_name:s.event_name||'',
       mode:s.session_type||s.mode||'PHOTO',payment_method:pay,
       amount_idr:Number.isFinite(known)?Math.max(0,Math.min(50000000,known)):0,
@@ -217,6 +217,95 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
    log('warn',`Cloud command ${c.type} ${retry?'deferred':'failed'}: ${e.message}`);
   }
  }
+
+ // Stream large session files from the local backend to Cloud without buffering
+ // videos in Electron memory. Only fixed local routes and authenticated Cloud URLs.
+ async function uploadLocalGalleryAsset(sid,kind,mode,eventName){
+  const videoId=String(sid).replace(/^video-/,'');
+  const route=kind==='preview'?'/api/session/'+encodeURIComponent(sid)+'/output.jpg':
+      kind==='archive'?'/api/session/'+encodeURIComponent(sid)+'/download.zip':
+      '/api/video/'+encodeURIComponent(videoId)+'.mp4';
+  const limit={preview:20,archive:80,video:150}[kind]*1024*1024;
+  const dest=config.server+'/api/agent/gallery/'+encodeURIComponent(sid)+'/upload?'+
+      new URLSearchParams({kind,mode,event_name:String(eventName||'').slice(0,100)});
+  return new Promise((resolve,reject)=>{
+    let settled=false,localReq=null,post=null;
+    const finish=(error,result)=>{
+      if(settled)return;
+      settled=true;
+      if(error)reject(error);else resolve(result);
+    };
+    const localUrl='http://127.0.0.1:8765'+route;
+    localReq=http.get(localUrl,{timeout:25000},res=>{
+      if(res.statusCode!==200){
+        res.resume();
+        return finish(Error('File lokal belum tersedia: '+res.statusCode+' '+route));
+      }
+      const size=Number(res.headers['content-length']||0);
+      if(size>limit){res.destroy();return finish(Error('File melewati batas upload Web '+kind));}
+      const parsed=new URL(dest);
+      post=(parsed.protocol==='https:'?https:http).request(parsed,{method:'POST',timeout:180000,
+        headers:{'X-Booth-Id':config.boothId,'X-Booth-Key':config.boothKey,
+          'Content-Type':'application/octet-stream',
+          ...(size>0?{'Content-Length':size}:{}),'Accept':'application/json'}},reply=>{
+        const chunks=[];let responseBytes=0;
+        reply.on('data',chunk=>{responseBytes+=chunk.length;if(responseBytes<1024*1024)chunks.push(chunk);});
+        reply.on('end',()=>{
+          try{
+            const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            if(reply.statusCode<200||reply.statusCode>=300)throw Error(String(result.detail||result.error||reply.statusCode));
+            finish(null,result);
+          }catch(e){finish(e);}
+        });
+      });
+      let sent=0;
+      res.on('data',chunk=>{sent+=chunk.length;if(sent>limit){res.destroy(Error('File lokal melewati batas '+kind));post.destroy();}});
+      res.on('error',e=>{post.destroy();finish(e)});
+      post.on('timeout',()=>post.destroy(Error('Cloud upload timeout')));
+      post.on('error',finish);
+      res.pipe(post);
+    });
+    localReq.on('timeout',()=>localReq.destroy(Error('Local capture backend timeout')));
+    localReq.on('error',finish);
+  });
+ }
+ async function uploadGallerySessions(preferences){
+  if(!['web','both'].includes(preferences.mode))return;
+  const photos=await localJSON('/api/sessions').then(x=>x.sessions||[]).catch(()=>[]);
+  const videos=await localJSON('/api/cloud/video-sessions').then(x=>x.sessions||[]).catch(()=>[]);
+  // One upload per sync cycle to avoid stalling booth control and previews.
+  const records=[...photos.filter(x=>x.status==='finished').map(x=>({...x,mode:'PHOTO'})),
+    ...videos.map(x=>({...x,mode:'VIDEO'}))];
+  for(const item of records){
+    const sid=String(item.id||'');
+    if(!/^[A-Za-z0-9_-]{6,100}$/.test(sid))continue;
+    const video=item.mode==='VIDEO',kind=video?'video':'preview';
+    const done=outbox.webSynced[sid]||{};
+    if(done[kind]){
+      if(!video&&!done.archive){
+        try{
+          await uploadLocalGalleryAsset(sid,'archive','PHOTO',item.event_name);
+          outbox.webSynced[sid].archive=true;atomicJSON(outboxFile,outbox);
+        }catch(err){log('warn','Arsip ZIP web ditunda: '+err.message);}
+        break;
+      }
+      continue;
+    }
+    try{
+      const created=await uploadLocalGalleryAsset(sid,kind,item.mode,item.event_name);
+      if(created.url){
+        // QR is generated and persisted on the booth, never in the public server.
+        await localJSON('/api/cloud/web-share',{method:'POST',json:{
+          session_id:sid,video,url:created.url}});
+      }
+      outbox.webSynced[sid]={...done,[kind]:true,web_url:created.url};
+      atomicJSON(outboxFile,outbox);
+    }catch(err){
+      log('warn','Upload galeri web tertunda: '+String(err.message).slice(0,180));
+    }
+    break;
+  }
+ }
  async function sync(){
   if(busy||!validOffline()||!config.server||!config.boothKey)return;
   busy=true;
@@ -229,6 +318,12 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
    }
    const r=await cloud('/agent/sync',{method:'POST',json:{version:app.getVersion(),cameras,remote_until:Math.floor(remoteUntil/1000),sessions:sessions.map(x=>x.data)}});
    for(const {data,fingerprint} of sessions){const sid=data.id;if(outbox.pending[sid]?.fingerprint===fingerprint){delete outbox.pending[sid];outbox.synced[sid]=fingerprint;}}
+   try{
+     const preferences=await cloud('/agent/gallery/preferences');
+     config.storageMode=preferences.mode||'local';config.shareProvider=preferences.share||'drive';save();
+     await localJSON('/api/cloud/media-policy',{method:'POST',json:{mode:config.storageMode,share:config.shareProvider}});
+     await uploadGallerySessions(preferences);
+   }catch(e){log('warn','Sinkronisasi media web: '+e.message);}
    atomicJSON(outboxFile,outbox);lastSync=Date.now();lastError='';
    for(const c of r.commands||[])await processCommand(c);
    const next=await cloud('/agent/commands');
