@@ -243,6 +243,19 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         with closing_sql() as db:
             return {'ok':True,**_prefs(db,b['id'])}
 
+    @app.post('/api/agent/gallery/preferences')
+    def agent_save_gallery_preferences(body:BoothPreference,b=Depends(agent_auth)):
+        # A licensed booth may change only its own storage preference.
+        if body.booth_id != b['id']:
+            raise HTTPException(403,'Booth tidak sesuai dengan lisensi perangkat.')
+        if body.share=='web' and body.mode not in ('web','both'):
+            raise HTTPException(400,'Aktifkan penyimpanan Web sebelum memilih QR Web.')
+        with transaction() as db:
+            db.execute('''INSERT INTO gallery_preferences(booth_id,mode,share) VALUES(?,?,?)
+                    ON CONFLICT(booth_id) DO UPDATE SET mode=excluded.mode,share=excluded.share''',
+                    (b['id'],body.mode,body.share))
+        return {'ok':True,'mode':body.mode,'share':body.share}
+
     @app.post('/api/agent/gallery/{session_id}/upload')
     async def upload_gallery(session_id:str,request:Request,kind:str=Query(default='preview'),mode:str=Query(default='PHOTO'),
                              event_name:str=Query(default='',max_length=100),b=Depends(agent_auth)):
