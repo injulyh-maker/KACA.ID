@@ -28,6 +28,11 @@
 .pager .btn{min-width:110px}.table td .btn{margin:1px}
 @media(max-width:600px){.toolbar-filters{width:100%}.toolbar-filters select,.mini-date input{min-width:0;max-width:100%}.mini-date{width:calc(50% - 6px)}.mini-date input{width:100%}.trend-day{min-width:20px}}
 
+.gallery-grid.gallery-list{grid-template-columns:1fr}
+.gallery-grid.gallery-list .gallery-item{display:grid;grid-template-columns:minmax(100px,170px) minmax(0,1fr) minmax(0,1fr);align-items:center}
+.gallery-grid.gallery-list .gallery-item img{grid-row:span 4;height:120px}
+.gallery-grid.gallery-list .gallery-actions{grid-column:2/-1;justify-content:flex-start}
+@media(max-width:720px){.gallery-grid.gallery-list .gallery-item{display:flex}}
 .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;padding:10px 0}
 .gallery-item{border:1px solid #314b7c;background:#111d39;border-radius:15px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:9px}
 .gallery-item img{display:block;width:100%;height:185px;object-fit:contain;background:#1b2947;border-radius:9px}
@@ -54,7 +59,7 @@
 <section id="sessions" class="view"><div class="card"><div class="toolbar"><h2 class="section-title" style="margin:0">Riwayat Hasil & Sesi</h2><div class="toolbar-filters"><select id="sessionBooth" aria-label="Filter booth"><option value="">Semua Booth</option></select><select id="sessionMode" aria-label="Filter mode"><option value="">PHOTO & VIDEO</option><option value="PHOTO">PHOTO</option><option value="VIDEO">VIDEO</option></select><label class="mini-date">Mulai<input type="date" id="sessionFrom" aria-label="Tanggal mulai"></label><label class="mini-date">Sampai<input type="date" id="sessionTo" aria-label="Tanggal akhir"></label><button type="button" class="btn alt sm" id="sessionExport">Unduh CSV</button></div></div><p class="muted">Hasil foto ditampilkan melalui tautan Google Drive; thumbnail hanya tersedia jika pengguna booth mengizinkan sinkronisasi foto ke cloud.</p><div class="tablewrap"><table class="table"><thead><tr><th>Preview</th><th>Tanggal/Sesi</th><th>Booth / Event</th><th>Mode</th><th>Pembayaran</th><th>Hasil Digital</th></tr></thead><tbody id="sessionRows"></tbody></table></div><div class="pager"><span id="sessionPagerLabel">Belum ada sesi</span><div class="pager-actions"><button id="sessionPrev" class="btn alt sm" type="button" disabled>← Sebelumnya</button><button id="sessionNext" class="btn alt sm" type="button" disabled>Berikutnya →</button></div></div></div></section>
 <section id="gallery" class="view">
 <div class="card"><div class="toolbar"><div><h2 class="section-title">Galeri Sesi Cloud</h2><p class="muted">Hasil yang diunggah secara opsional ke KACA.ID Web. Tautan pelanggan tidak memerlukan login, tetapi sulit ditebak dan memiliki tanggal kedaluwarsa.</p></div>
-<div class="toolbar-filters"><select id="galleryBooth"><option value="">Semua Booth</option></select><select id="galleryLimit"><option value="12">12 / halaman</option><option value="24" selected>24 / halaman</option><option value="48">48 / halaman</option></select><button class="btn alt sm" id="galleryRefresh">Muat ulang</button></div></div>
+<div class="toolbar-filters"><button class="btn alt sm" id="galleryMode">Tampilan: Grid</button><select id="galleryBooth"><option value="">Semua Booth</option></select><label class="field">Tanggal<input id="galleryDate" type="date" aria-label="Filter tanggal sesi"></label><select id="gallerySort" aria-label="Urutkan galeri"><option value="newest">Terbaru dahulu</option><option value="oldest">Terlama dahulu</option></select><select id="galleryLimit"><option value="12">12 / halaman</option><option value="24" selected>24 / halaman</option><option value="48">48 / halaman</option></select><button class="btn alt sm" id="galleryRefresh">Muat ulang</button></div></div>
 <div class="gallery-summary"><span id="galleryCount">0 sesi</span><span id="galleryStorage">0 MB</span></div>
 <div class="gallery-grid" id="galleryGrid"><p class="muted">Pilih booth atau tunggu sinkronisasi.</p></div>
 <div class="pager"><span id="galleryPager">Halaman 1</span><div class="pager-actions"><button class="btn alt sm" id="galleryPrev">Sebelumnya</button><button class="btn alt sm" id="galleryNext">Berikutnya</button></div></div>
@@ -98,7 +103,7 @@ function setOptions(select,booths){const saved=select.value;clear(select);for(co
 function statusBadge(b){return node('span',b.online?'Online':'Offline','badge '+(b.online?'ok':'warn'))}
 async function fetchBooths(){const r=await api('/booths');allBooths=r.booths;$('boothStatus').textContent=`${allBooths.filter(b=>b.online).length}/${allBooths.length} online`;for(const id of ['settingBooth','voucherBooth','remoteBooth'])setOptions($(id),allBooths);const saved=$('sessionBooth').value;clear($('sessionBooth'));const first=document.createElement('option');first.value='';first.textContent='Semua Booth';$('sessionBooth').append(first);for(const b of allBooths){const o=node('option',b.name);o.value=b.id;$('sessionBooth').append(o)}$('sessionBooth').value=saved;return allBooths;}
 
-let galleryOffset=0;
+let galleryOffset=0,galleryListMode=false;
 async function loadWebGallery(){
  const config=await api('/gallery/config');
  const select=$('galleryBooth'),wanted=select.value;clear(select);
@@ -106,10 +111,14 @@ async function loadWebGallery(){
  for(const b of config.booths){const option=node('option',b.name);option.value=b.id;select.append(option);}
  if(config.booths.some(b=>b.id===wanted))select.value=wanted;
  const limit=Math.max(1,Math.min(100,Number($('galleryLimit').value)||24));
- const query=new URLSearchParams({limit:String(limit),offset:String(galleryOffset)});
+ const query=new URLSearchParams({limit:String(limit),offset:String(galleryOffset),sort:$('gallerySort').value});
  if(select.value)query.set('booth_id',select.value);
+ if($('galleryDate').value){
+   query.set('date_from',$('galleryDate').value);
+   query.set('date_to',$('galleryDate').value);
+ }
  const response=await api('/gallery?'+query);
- const grid=$('galleryGrid');clear(grid);
+ const grid=$('galleryGrid');clear(grid);grid.classList.toggle('gallery-list',galleryListMode);
  let used=0;
  for(const item of response.items){
    used+=item.bytes||0;
@@ -138,7 +147,7 @@ async function loadWebGallery(){
  }
  if(!response.items.length)grid.append(node('p','Belum ada file web untuk filter ini. Aktifkan penyimpanan web pada booth.','muted'));
  $('galleryCount').textContent=response.total+' sesi web';
- $('galleryStorage').textContent='Halaman ini: '+(used/(1024*1024)).toFixed(1)+' MB';
+ $('galleryStorage').textContent='Penyimpanan terfilter: '+(Number(response.storage_used_bytes||0)/(1024*1024)).toFixed(1)+' MB';
  $('galleryPager').textContent='Halaman '+(Math.floor(galleryOffset/limit)+1)+' • '+response.total+' sesi';
  $('galleryPrev').disabled=galleryOffset===0;
  $('galleryNext').disabled=!response.has_more;
@@ -188,6 +197,9 @@ $('galleryBrandForm').onsubmit=async e=>{
 };
 $('galleryRefresh').onclick=()=>loadWebGallery().catch(e=>notice(e.message));
 $('galleryBooth').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
+$('galleryDate').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
+$('gallerySort').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
+$('galleryMode').onclick=()=>{galleryListMode=!galleryListMode;$('galleryMode').textContent=galleryListMode?'Tampilan: Daftar':'Tampilan: Grid';$('galleryGrid').classList.toggle('gallery-list',galleryListMode);};
 $('galleryLimit').onchange=()=>{galleryOffset=0;loadWebGallery().catch(e=>notice(e.message));};
 $('galleryPrev').onclick=()=>{galleryOffset=Math.max(0,galleryOffset-Number($('galleryLimit').value));loadWebGallery().catch(e=>notice(e.message));};
 $('galleryNext').onclick=()=>{galleryOffset+=Number($('galleryLimit').value);loadWebGallery().catch(e=>notice(e.message));};
