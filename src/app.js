@@ -699,7 +699,9 @@ async function renderGeneralSettings(){
     const btn=$('#saveCloudMediaPolicy');btn.disabled=true;
     try{
       const p=await window.kaca.cloudSaveGalleryPreferences({mode:mediaMode.value,share:mediaShare.value});
-      mediaStatus.textContent='Tersimpan di Cloud. Penyimpanan: '+p.mode+'; tautan/QR: '+p.share+'.';
+      mediaStatus.textContent=p.localSynced?
+        'Tersimpan dan aktif. Penyimpanan: '+p.mode+'; tautan/QR: '+p.share+'.':
+        'Tersimpan di Cloud. Sinkronisasi backend lokal tertunda; otomatis dicoba lagi saat Cloud terhubung. Penyimpanan: '+p.mode+'; tautan/QR: '+p.share+'.';
     }catch(e){mediaStatus.textContent='Gagal menyimpan: '+e.message;}
     finally{btn.disabled=false;}
   };
