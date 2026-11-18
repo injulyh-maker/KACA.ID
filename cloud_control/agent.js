@@ -345,6 +345,53 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   }
   } finally {webUploadBusy=false;}
  }
+ // Incremental Web upload: upload a new ZIP as soon as each original photo
+ // has been persisted by the camera backend. Later revisions add the frame,
+ // GIF and Live Photo to the SAME reserved session URL.
+ async function uploadRealtimeGallery(){
+  if(webUploadBusy||!validOffline()||!config.boothKey||
+     !['web','both'].includes(config.storageMode||''))return;
+  webUploadBusy=true;
+  try{
+   const progress=await localJSON('/api/cloud/gallery-progress');
+   const sessions=Array.isArray(progress.sessions)?progress.sessions:[];
+   for(const session of sessions){
+    const sid=String(session.id||'');
+    if(!/^[A-Za-z0-9_-]{6,100}$/.test(sid)||!session.revision)continue;
+    const done=outbox.webSynced[sid]||{};
+    if(done.archive_revision===session.revision)continue;
+    try{
+     const created=await uploadLocalGalleryAsset(sid,'archive','PHOTO',session.event_name);
+     const next={...done,archive:true,archive_revision:session.revision,
+                 web_url:created.url||done.web_url};
+     outbox.webSynced[sid]=next;atomicJSON(outboxFile,outbox);
+     if(next.web_url&&!next.qr_registered){
+      try{
+       const ack=await localJSON('/api/cloud/web-share',{method:'POST',json:{
+         session_id:sid,video:false,url:next.web_url}});
+       if(ack.ok&&ack.qr_available){
+        next.qr_registered=true;outbox.webSynced[sid]=next;atomicJSON(outboxFile,outbox);
+       }
+      }catch(err){log('warn','QR Web foto akan dicoba lagi: '+err.message);}
+     }
+    }catch(err){
+     log('warn','Upload foto Web real-time '+sid+': '+String(err.message).slice(0,180));
+    }
+    // Only one bounded ZIP transfer per poll; avoid saturation during capture.
+    break;
+   }
+  }catch(err){log('warn','Polling foto Web real-time: '+String(err.message).slice(0,160));}
+  finally{webUploadBusy=false;}
+ }
+ async function realtimeGalleryTick(){
+  if(!validOffline()||!config.boothKey||!['web','both'].includes(config.storageMode||''))return;
+  await uploadRealtimeGallery();
+  // Completed video becomes playable only after MP4 finalization.
+  if(!webUploadBusy){
+   void uploadGallerySessions({mode:config.storageMode,share:config.shareProvider})
+    .catch(err=>log('warn','Sinkronisasi media Web: '+err.message));
+  }
+ }
  async function sync(){
   if(busy||!validOffline()||!config.server||!config.boothKey)return;
   busy=true;
@@ -432,9 +479,10 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
  // Permit browsing Settings and activating from the dedicated License menu.
  // Session start is independently gated by cloud:assert-license.
  const tick=setInterval(()=>{void sync()},30000);
+ const galleryTick=setInterval(()=>{void realtimeGalleryTick()},5000);
  const screenshots=setInterval(()=>{void snapshot()},4000);
- tick.unref?.();screenshots.unref?.();
+ tick.unref?.();galleryTick.unref?.();screenshots.unref?.();
  setTimeout(()=>{void sync()},3500);
- return {status,sync,openActivation,stop:()=>{clearInterval(tick);clearInterval(screenshots)},validOffline};
+ return {status,sync,openActivation,stop:()=>{clearInterval(tick);clearInterval(galleryTick);clearInterval(screenshots)},validOffline};
 }
 module.exports={initCloudAgent,verifyLicense,hardwareId};
