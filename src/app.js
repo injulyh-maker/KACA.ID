@@ -299,6 +299,7 @@ function mountGeneralSettingsSubmenus(onCameraOpen){
  const sections={
   'Lokasi Penyimpanan Lokal':'storage',
   'Penyimpanan & Berbagi Otomatis Google Drive':'storage',
+   'Penyimpanan Web KACA.ID':'storage',
   'Metode Pengiriman WhatsApp':'sharing',
   'Konfigurasi WhatsApp Cloud API':'sharing',
   'Mode yang Ditampilkan di Dasbor':'sharing',
@@ -669,6 +670,40 @@ async function renderGeneralSettings(){
    });
  }
  updatePreviewVisuals();
+  // Cloud media policy for a licensed booth. Always preserve local originals.
+  $('#content').insertAdjacentHTML('beforeend',`<div class="panel"><div class="eyebrow2">KACA.ID / WEB CLOUD STORAGE</div><h3>Penyimpanan Web KACA.ID</h3><p class="muted">Semua hasil tetap tersimpan lokal. Aktifkan unggahan Google Drive, Galeri Web, atau keduanya. Pengaturan disinkronkan dengan booth Cloud dan digunakan untuk tautan serta QR hasil sesi.</p><div class="form-grid"><div class="field"><label>Metode penyimpanan</label><select id="cloudMediaMode"><option value="local">Lokal saja</option><option value="drive">Lokal + Google Drive</option><option value="web">Lokal + Web KACA.ID</option><option value="both">Lokal + Google Drive + Web</option></select></div><div class="field"><label>Sumber tautan &amp; QR</label><select id="cloudMediaShare"><option value="drive">Google Drive</option><option value="web">Galeri Web KACA.ID</option></select></div></div><div class="actions wrap"><button class="btn" id="saveCloudMediaPolicy" type="button">Simpan Pengaturan Penyimpanan</button><button class="btn secondary" id="refreshCloudMediaPolicy" type="button">Periksa Pengaturan Cloud</button></div><div class="notice" id="cloudMediaStatus">Memeriksa konfigurasi booth…</div><small class="field-help">Memerlukan lisensi Cloud aktif dan koneksi internet saat mengubah pengaturan. Jika memilih Lokal saja, tautan QR Cloud tidak akan dibuat untuk sesi baru. Unggahan Web berjalan di latar belakang saat booth tersambung.</small></div>`);
+  const mediaMode=$('#cloudMediaMode'),mediaShare=$('#cloudMediaShare'),mediaStatus=$('#cloudMediaStatus');
+  const mediaOptions=()=>{
+    const hasWeb=['web','both'].includes(mediaMode.value),hasDrive=['drive','both'].includes(mediaMode.value);
+    mediaShare.querySelector('[value="web"]').disabled=!hasWeb;
+    mediaShare.querySelector('[value="drive"]').disabled=!hasDrive;
+    if(hasWeb&&!hasDrive)mediaShare.value='web';
+    else if(hasDrive&&!hasWeb)mediaShare.value='drive';
+    else if(!hasWeb&&!hasDrive)mediaShare.value='drive';
+    mediaShare.disabled=!hasWeb&&!hasDrive;
+  };
+  const refreshCloudMedia=async()=>{
+    try{
+      const state=await window.kaca.cloudStatus();
+      if(!state.licenseActive)throw Error('Lisensi Cloud belum aktif; buka menu Lisensi KACA.ID.');
+      const p=await window.kaca.cloudGalleryPreferences();
+      mediaMode.value=['local','drive','web','both'].includes(p.mode)?p.mode:'drive';
+      mediaShare.value=p.share==='web'?'web':'drive';
+      mediaOptions();
+      mediaStatus.textContent='Pengaturan booth '+(p.boothName||p.boothId||'')+' berhasil dimuat.';
+    }catch(e){mediaStatus.textContent='Gagal membaca konfigurasi Cloud: '+e.message;}
+  };
+  mediaMode.addEventListener('change',mediaOptions);
+  $('#refreshCloudMediaPolicy').onclick=()=>refreshCloudMedia();
+  $('#saveCloudMediaPolicy').onclick=async()=>{
+    const btn=$('#saveCloudMediaPolicy');btn.disabled=true;
+    try{
+      const p=await window.kaca.cloudSaveGalleryPreferences({mode:mediaMode.value,share:mediaShare.value});
+      mediaStatus.textContent='Tersimpan di Cloud. Penyimpanan: '+p.mode+'; tautan/QR: '+p.share+'.';
+    }catch(e){mediaStatus.textContent='Gagal menyimpan: '+e.message;}
+    finally{btn.disabled=false;}
+  };
+  void refreshCloudMedia();
   mountKacaSoundSettings();
   mountGeneralSettingsSubmenus(autoOpenCameraSettings);
 
