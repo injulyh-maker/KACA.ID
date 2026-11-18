@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('kaca', {
   cloudStatus: () => ipcRenderer.invoke('cloud:status'),
   cloudGalleryPreferences: () => ipcRenderer.invoke('cloud:gallery-preferences'),
+  reserveCloudGallerySession: (sessionId,mode,eventName) => ipcRenderer.invoke('cloud:gallery-reserve',{sessionId,mode,eventName}),
   cloudSaveGalleryPreferences: choice => ipcRenderer.invoke('cloud:gallery-save-preferences', choice),
   assertCloudLicense: () => ipcRenderer.invoke('cloud:assert-license'),
   activateCloudLicense: data => ipcRenderer.invoke('cloud:activate', data),
