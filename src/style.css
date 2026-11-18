@@ -1884,3 +1884,52 @@ body.photo-session-mode #content.photo-session-content[data-flow-step="3"] #capt
   width:60px!important;height:60px!important;
  }
 }
+
+
+/* Video v0.9.95: match the clean photo-capture composition. Frame is only
+   composited into the saved MP4; it never obscures the live camera. */
+body.photo-session-mode #content.video-session-content[data-flow-step="3"]{
+ overflow-y:auto!important;overflow-x:hidden!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoCaptureGrid{
+ display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+ grid-template-rows:minmax(0,auto) auto!important;
+ width:min(calc(100vw - 36px),calc((100dvh - 205px) * 1.77778))!important;
+ max-width:1480px!important;height:auto!important;min-height:0!important;
+ margin:10px auto 24px!important;gap:10px!important;align-items:start!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoCaptureGrid>.panel{
+ position:relative!important;min-height:0!important;width:100%!important;
+ height:auto!important;padding:0!important;border:0!important;background:transparent!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoPreviewBox{
+ width:100%!important;height:auto!important;aspect-ratio:16 / 9!important;
+ max-height:none!important;min-height:0!important;overflow:hidden!important;
+ border:0!important;border-radius:18px!important;background:#03050d!important;
+ box-shadow:0 7px 25px #02021388!important;
+}
+body.photo-session-mode #content.video-session-content #videoFrameOverlay{
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoLivePreview{
+ display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] .video-capture-controls{
+ display:flex!important;flex-wrap:wrap!important;align-items:center!important;justify-content:space-between!important;
+ gap:12px!important;padding:10px 16px!important;border-radius:16px!important;
+ background:#16182c!important;border:1px solid #4d4566!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoCountdown{
+ font-size:clamp(21px,3vw,38px)!important;line-height:1.2!important;
+}
+body.photo-session-mode #content.video-session-content[data-flow-step="3"] .video-capture-controls .progress-track{
+ flex:1 1 100%!important;
+}
+@media(max-width:720px){
+ body.photo-session-mode #content.video-session-content[data-flow-step="3"] #videoCaptureGrid{
+  width:calc(100vw - 16px)!important;margin:6px auto!important;
+ }
+ body.photo-session-mode #content.video-session-content[data-flow-step="3"] .video-capture-controls{
+  padding:8px!important;gap:8px!important;
+ }
+}
