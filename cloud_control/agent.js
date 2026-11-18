@@ -271,14 +271,15 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
     localReq.on('error',finish);
   });
  }
- async function uploadGallerySessions(preferences){
+ async function uploadGallerySessions(preferences,{videoOnly=false}={}){
   if(webUploadBusy||!['web','both'].includes(preferences.mode))return;
   webUploadBusy=true;
   try{
   const photos=await localJSON('/api/sessions').then(x=>x.sessions||[]).catch(()=>[]);
   const videos=await localJSON('/api/cloud/video-sessions').then(x=>x.sessions||[]).catch(()=>[]);
   // One upload per sync cycle to avoid stalling booth control and previews.
-  const records=[...photos.filter(x=>x.status==='finished').map(x=>({...x,mode:'PHOTO'})),
+  const records=videoOnly?videos.map(x=>({...x,mode:'VIDEO'})):
+    [...photos.filter(x=>x.status==='finished').map(x=>({...x,mode:'PHOTO'})),
     ...videos.map(x=>({...x,mode:'VIDEO'}))];
   // New sessions must receive their customer-facing link before historical backfill.
   const stamp=x=>{
@@ -388,8 +389,8 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   await uploadRealtimeGallery();
   // Completed video becomes playable only after MP4 finalization.
   if(!webUploadBusy){
-   void uploadGallerySessions({mode:config.storageMode,share:config.shareProvider})
-    .catch(err=>log('warn','Sinkronisasi media Web: '+err.message));
+   void uploadGallerySessions({mode:config.storageMode,share:config.shareProvider},{videoOnly:true})
+    .catch(err=>log('warn','Sinkronisasi video Web: '+err.message));
   }
  }
  async function sync(){
@@ -444,6 +445,11 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   return {enabled:true,url:reserved.url,qr_available:true};
  }
  ipcMain.handle('cloud:gallery-reserve',(_event,payload)=>reserveWebSession(payload?.sessionId,payload?.mode,payload?.eventName));
+ ipcMain.handle('cloud:gallery-upload-now',()=>{
+  // IPC request only triggers background work; never stall shutter or video UI.
+  void realtimeGalleryTick().catch(err=>log('warn','Unggah sesi Web: '+err.message));
+  return {ok:true,queued:true};
+ });
  ipcMain.handle('cloud:gallery-preferences',async()=>{
   if(!validOffline()||!config.boothId||!config.boothKey)throw Error('Aktifkan lisensi Cloud untuk mengatur penyimpanan Web.');
   const remote=await cloud('/agent/gallery/preferences');
