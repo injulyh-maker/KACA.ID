@@ -431,13 +431,24 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                           'name':item['name'],'url':'/api/public/session/'+token+'/assets/'+str(i)}
                           for i,item in enumerate(items)]}
 
+    def _album_revision(row):
+        details=[]
+        for kind in ('archive','preview','video'):
+            file=_safe_file(row,kind)
+            if file:
+                try:
+                    stat=file.stat()
+                    details.append((kind,stat.st_size,stat.st_mtime_ns))
+                except OSError:pass
+        return hashlib.sha256(repr(details).encode('utf-8')).hexdigest()[:24]
+
     @app.get('/api/public/session/{token}/state')
     def public_session_state(token:str):
         row,_,_=_token_lookup(token)
         archive_items=_archive_items(row)
         count=len(archive_items) or int(bool(_safe_file(row,'preview')))
         if row['mode']=='VIDEO' and _safe_file(row,'video'):count+=1
-        return {'ok':True,'item_count':count,
+        return {'ok':True,'item_count':count,'revision':_album_revision(row),
                 'archive_ready':bool(row['archive_path']),
                 'video_ready':bool(row['video_path'])}
 
@@ -476,6 +487,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                          '<a class="download" href="'+src+'" download>↓ Unduh Video</a></div></article>')
         if not cards:
             cards.append('<div class="empty">File sesi sedang dipersiapkan. Muat ulang setelah beberapa saat.</div>')
+        initial_revision=_album_revision(row)
         initial_count=len(items) or int(bool(_safe_file(row,'preview')))
         if row['mode']=='VIDEO' and _safe_file(row,'video'):initial_count+=1
         logo=('<img class="brand-logo" alt="Logo Studio" src="/api/public/brand/'+html.escape(owner_id)+'/logo">'
@@ -545,7 +557,7 @@ const galleryWait=setInterval(async()=>{
   const response=await fetch('/api/public/session/__TOKEN__/state',{cache:'no-store'});
   if(!response.ok)return;
   const state=await response.json();
-  if(state.item_count>__COUNT__){clearInterval(galleryWait);location.reload();}
+  if(state.revision!=='__REVISION__'||state.item_count>__COUNT__){clearInterval(galleryWait);location.reload();}
  }catch(e){}
 },4000);
 document.getElementById('shareLink').addEventListener('click',async()=>{
@@ -558,7 +570,8 @@ document.getElementById('shareLink').addEventListener('click',async()=>{
                .replace('__SUBTITLE__',sub).replace('__SESSION_NAME__',session_label)
                .replace('__SESSION_ID__',html.escape(row['session_id']))
                .replace('__LOGO__',logo).replace('__TOKEN__',token)
-               .replace('__CARDS__',''.join(cards)).replace('__COUNT__',str(initial_count)))
+               .replace('__CARDS__',''.join(cards)).replace('__COUNT__',str(initial_count))
+               .replace('__REVISION__',initial_revision))
         return HTMLResponse(page,headers={'Cache-Control':'private,no-store','Content-Security-Policy':
             "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"})
 
