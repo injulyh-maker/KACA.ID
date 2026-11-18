@@ -376,7 +376,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         status=200
         wanted=request.headers.get('range','')
         if wanted and item['mime'].startswith('video/'):
-            match=re.fullmatch(r'bytes=(\\d+)-(\\d*)',wanted)
+            match=re.fullmatch(r'bytes=(\d+)-(\d*)',wanted)
             if not match:raise HTTPException(416,'Rentang video tidak valid.')
             start=int(match.group(1))
             end=min(size-1,int(match.group(2))) if match.group(2) else size-1
