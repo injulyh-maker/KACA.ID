@@ -4052,7 +4052,7 @@ class Handler(BaseHTTPRequestHandler):
                 names=[]
                 for photo in manifest.get('photos',[]):
                     original=str(photo.get('original') or '')
-                    if re.fullmatch(r'original_\\d+\\.jpg',original):names.append(original)
+                    if re.fullmatch(r'original_\d+\.jpg',original):names.append(original)
                 names.extend(('output.jpg','originals.gif','output_live.mp4','output_live.webm'))
                 for filename in names:
                     fp=os.path.join(folder,filename)
