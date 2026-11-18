@@ -452,7 +452,8 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
  });
  ipcMain.handle('cloud:gallery-preferences',async()=>{
   if(!validOffline()||!config.boothId||!config.boothKey)throw Error('Aktifkan lisensi Cloud untuk mengatur penyimpanan Web.');
-  const remote=await cloud('/agent/gallery/preferences');
+  const remote=await cloud('/agent/gallery/preferences',{timeout:25000});
+  config.storageMode=remote.mode;config.shareProvider=remote.share;save();
   return {mode:remote.mode,share:remote.share,boothId:config.boothId,boothName:config.boothName||''};
  });
  ipcMain.handle('cloud:gallery-save-preferences',async(_event,choice)=>{
@@ -460,11 +461,31 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   const mode=String(choice?.mode||''),share=String(choice?.share||'');
   if(!['local','drive','web','both'].includes(mode)||!['drive','web'].includes(share))throw Error('Pilihan penyimpanan tidak valid.');
   if(share==='web'&&!['web','both'].includes(mode))throw Error('Untuk QR Web, aktifkan penyimpanan Web.');
-  const response=await cloud('/agent/gallery/preferences',{method:'POST',json:{booth_id:config.boothId,mode,share}});
-  await localJSON('/api/cloud/media-policy',{method:'POST',json:{mode:response.mode,share:response.share}});
+  // Gallery uploads and SQLite writes may briefly delay API responses.
+  // A POST timeout is ambiguous: first read back the persisted preference
+  // before retrying, so we never report a successful write as definitely failed.
+  let response;
+  try{
+    response=await cloud('/agent/gallery/preferences',{
+      method:'POST',json:{booth_id:config.boothId,mode,share},timeout:30000});
+  }catch(err){
+    try{
+      const current=await cloud('/agent/gallery/preferences',{timeout:20000});
+      if(current.mode===mode&&current.share===share)response=current;
+    }catch(checkError){log('warn','Verifikasi pengaturan Cloud: '+checkError.message);}
+    if(!response)throw Error('Pengaturan belum terkonfirmasi di Cloud: '+err.message+'. Periksa koneksi VPS lalu gunakan Periksa Pengaturan Cloud.');
+  }
   config.storageMode=response.mode;config.shareProvider=response.share;save();
+  let localSynced=true;
+  try{
+    await localJSON('/api/cloud/media-policy',{
+      method:'POST',json:{mode:response.mode,share:response.share}});
+  }catch(localErr){
+    localSynced=false;
+    log('warn','Pengaturan tersimpan di Cloud, sinkronisasi backend lokal tertunda: '+localErr.message);
+  }
   void sync();
-  return {mode:response.mode,share:response.share,boothId:config.boothId};
+  return {mode:response.mode,share:response.share,boothId:config.boothId,localSynced};
  });
  ipcMain.handle('cloud:status',()=>status());
  ipcMain.handle('cloud:assert-license',()=>{if(!validOffline())throw Error(lastError||'Lisensi tidak aktif.');return {ok:true,expires_at:config.licenseExpires};});
