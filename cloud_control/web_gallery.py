@@ -374,7 +374,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                         category='frame';mime='image/jpeg';label='Foto dalam Frame'
                     elif (lower.startswith('gif/') or (lower.startswith('final_results/') and basename.lower()=='gif_originals.gif')) and basename.lower().endswith('.gif'):
                         category='gif';mime='image/gif';label='GIF'
-                    elif ((lower.startswith('live photo dalam frame/') and basename.lower().endswith('.mp4')) or
+                    elif ((lower.startswith('live photo dalam frame/') and basename.lower().endswith(('.mp4','.webm'))) or
                           (lower.startswith('live_photos/') and basename.lower() in ('live_photo_frame.mp4','live_photo_frame.webm'))):
                         category='live';mime='video/webm' if basename.lower().endswith('.webm') else 'video/mp4';label='Live Photo'
                     else:continue
