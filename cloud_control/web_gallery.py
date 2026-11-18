@@ -359,6 +359,11 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                     items.append({'filename':info.filename,'name':basename,'category':category,
                                   'label':label,'mime':mime,'bytes':info.file_size})
         except (OSError,zipfile.BadZipFile,RuntimeError):return []
+        # Only one browser Live Photo card: prefer WebM preview over MP4 duplicate.
+        live=[x for x in items if x['category']=='live']
+        if len(live)>1:
+            preferred=next((x for x in live if x['mime']=='video/webm'),live[0])
+            items=[x for x in items if x['category']!='live']+[preferred]
         return items
 
     @app.get('/api/public/session/{token}/assets/{index}')
@@ -481,14 +486,14 @@ padding:22px;margin:26px 0;font-size:15px}
 <section class="content"><h2>↓ Download Your Photos</h2>
 <p class="sub">Terima kasih telah berfoto bersama kami! Lihat, putar, dan unduh hasil foto atau video pilihan Anda.</p>
 <div class="actions"><a class="button" href="/api/public/session/__TOKEN__/download">↓ Download All Files</a>
-<button type="button" class="button alt" id="shareLink">↗ Bagikan Link</button></div>
-<div class="filters"><button class="filter active" data-filter="all">Semua</button>
-<button class="filter" data-filter="frame">Foto Frame</button>
-<button class="filter" data-filter="original">Original</button>
-<button class="filter" data-filter="gif">GIF</button>
+<button type="button" class="button alt" id="shareLink">↗ Share Link to Your Friends!</button></div>
+<div class="filters"><button class="filter active" data-filter="all">All</button>
 <button class="filter" data-filter="live">Live Photo</button>
+<button class="filter" data-filter="gif">GIF</button>
+<button class="filter" data-filter="original">Original</button>
+<button class="filter" data-filter="frame">Print</button>
 <button class="filter" data-filter="video">Video</button></div>
-<div class="message">♥ Pesan Spesial<br>Semoga momen indah ini menjadi kenangan yang berharga.</div>
+<div class="message">♥ Special Message<br>Semoga momen indah ini menjadi kenangan yang berharga.</div>
 <div class="gallery">__CARDS__</div>
 <p class="privacy">Tautan ini bersifat privat: siapa pun yang memiliki link atau QR dapat melihat hasil sampai masa simpan berakhir.</p>
 </section></main>
