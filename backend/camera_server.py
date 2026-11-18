@@ -479,7 +479,7 @@ def _set_drive_manifest(job, status, url=None, error=None):
             if folder and os.path.isdir(folder): _write_local_session_info(manifest)
             # QR-overlaid output is uploaded as its own asset, rather than re-uploading
             # Hasil_Frame.jpg without QR or blocking the Drive worker on an extra upload.
-            if manifest.get('drive_url'):
+            if _preferred_share_url(manifest):
                 _refresh_drive_qr_output(manifest)
     except Exception as exc: print('[GOOGLE_DRIVE_MANIFEST_WARNING]', repr(exc), flush=True)
 
@@ -940,7 +940,7 @@ def _start_session_drive_folder_provision(session_id):
 
 
 # Recover an interrupted early folder-creation attempt after an application restart.
-if google_drive.status().get('connected'):
+if _drive_upload_enabled() and google_drive.status().get('connected'):
     try:
         for _sid in os.listdir(SESSIONS_DIR):
             _manifest = read_manifest(_sid)
@@ -4829,7 +4829,11 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
                 session['recording'] = False
                 session['live_video'] = None
                 create_local_session_archive(session)
-                if google_drive.status().get('connected'):
+                if not _drive_upload_enabled():
+                    session['drive_folder_status']='disabled'
+                    session['drive_status']='local_only'
+                    session['drive_error']=None
+                elif google_drive.status().get('connected'):
                     session['drive_folder_status'] = 'creating'
                     session['drive_status'] = 'provisioning'
                     session['drive_error'] = None
