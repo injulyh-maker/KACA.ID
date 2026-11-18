@@ -227,7 +227,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
        :'/api/session/'+encodeURIComponent(sid)+'/output.jpg'):
       kind==='archive'?'/api/session/'+encodeURIComponent(sid)+'/download.zip':
       '/api/video/'+encodeURIComponent(videoId)+'.mp4';
-  const limit={preview:20,archive:80,video:150}[kind]*1024*1024;
+  const limit={preview:20,archive:200,video:150}[kind]*1024*1024;
   const dest=config.server+'/api/agent/gallery/'+encodeURIComponent(sid)+'/upload?'+
       new URLSearchParams({kind,mode,event_name:String(eventName||'').slice(0,100)});
   return new Promise((resolve,reject)=>{
