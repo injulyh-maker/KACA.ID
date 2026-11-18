@@ -4041,7 +4041,12 @@ class Handler(BaseHTTPRequestHandler):
             # Localhost-only Cloud Agent: poll in-progress photos without waiting
             # for the result slide. The preview/final assets join the same album.
             items=[]
-            try:session_ids=sorted(os.listdir(SESSIONS_DIR),reverse=True)
+            # Session IDs are random hex; order by actual directory modification,
+            # otherwise a new photo can fall outside the 40-session polling window.
+            try:
+                entries=[e for e in os.scandir(SESSIONS_DIR) if e.is_dir()]
+                entries.sort(key=lambda e:e.stat().st_mtime_ns,reverse=True)
+                session_ids=[e.name for e in entries[:40]]
             except OSError:session_ids=[]
             for sid in session_ids[:40]:
                 if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid):continue
