@@ -280,6 +280,13 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   // One upload per sync cycle to avoid stalling booth control and previews.
   const records=[...photos.filter(x=>x.status==='finished').map(x=>({...x,mode:'PHOTO'})),
     ...videos.map(x=>({...x,mode:'VIDEO'}))];
+  // New sessions must receive their customer-facing link before historical backfill.
+  const stamp=x=>{
+    const value=x.finished_at||x.created_at||x.updated_at||'';
+    if(typeof value==='number')return value;
+    const n=Date.parse(String(value));return Number.isFinite(n)?n/1000:0;
+  };
+  records.sort((a,b)=>stamp(b)-stamp(a));
   for(const item of records){
     const sid=String(item.id||'');
     if(!/^[A-Za-z0-9_-]{6,100}$/.test(sid))continue;
