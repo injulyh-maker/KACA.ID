@@ -1570,7 +1570,7 @@ def stop_session_video():
             print('[VIDEO_STOP_ERROR]', repr(exc), flush=True)
 
 
-def event_frame_owner_error(frame_id, event_id):
+def event_frame_owner_error(frame_id, event_id, purpose='photo'):
     """Prevent a booth event from accidentally using frames belonging to another profile."""
     fid=str(frame_id or '').strip()
     if not fid: return None
@@ -1583,6 +1583,9 @@ def event_frame_owner_error(frame_id, event_id):
     except (OSError,ValueError): meta={}
     if str(meta.get('event_id') or '') != str(event_id or ''):
         return 'Frame berasal dari event lain. Pilih frame khusus event yang aktif.'
+    frame_mode=str(meta.get('media_mode') or 'photo')
+    if frame_mode != purpose:
+        return 'Frame ini hanya untuk '+('foto' if frame_mode=='photo' else 'video')+'. Pilih frame yang sesuai mode sesi.'
     return None
 
 
@@ -3843,7 +3846,7 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         with open(meta_path,'r',encoding='utf-8') as mf: meta=json.load(mf)
                     except Exception: meta={}
-                    frames.append({'id':name[:-4],'name':meta.get('name',name[:-4]),'active':bool(meta.get('enabled',True)),'enabled':bool(meta.get('enabled',True)),'width':meta.get('width'),'height':meta.get('height'),'event_id':meta.get('event_id') or None,'url':f'http://127.0.0.1:{PORT}/api/frames/{name}'})
+                    frames.append({'id':name[:-4],'name':meta.get('name',name[:-4]),'active':bool(meta.get('enabled',True)),'enabled':bool(meta.get('enabled',True)),'width':meta.get('width'),'height':meta.get('height'),'event_id':meta.get('event_id') or None,'media_mode':meta.get('media_mode','photo'),'url':f'http://127.0.0.1:{PORT}/api/frames/{name}'})
             return self.send_json({'ok':True,'frames':frames})
         if path.startswith('/api/frames/') and path.endswith('/activate'):
             fid=path.split('/')[-2]
@@ -4502,6 +4505,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/camera/controls':
             result=set_camera_controls(int(data.get('camera',0) or 0),data.get('values') or {})
             return self.send_json(result,200 if result.get('ok') else 409)
+        if path == '/api/frames/mode':
+            fid=str(data.get('frame_id') or '')
+            media_mode=str(data.get('media_mode') or '')
+            if not re.fullmatch(r'[a-f0-9]{12,32}',fid) or media_mode not in ('photo','video'):
+                return self.send_json({'ok':False,'error':'ID atau jenis frame tidak valid.'},400)
+            mp=os.path.join(FRAMES_DIR,fid+'.json')
+            if not os.path.isfile(os.path.join(FRAMES_DIR,fid+'.png')):
+                return self.send_json({'ok':False,'error':'Frame tidak ditemukan.'},404)
+            try:
+                with open(mp,encoding='utf-8') as f:meta=json.load(f)
+            except (OSError,ValueError):meta={}
+            meta['media_mode']=media_mode
+            with open(mp+'.tmp','w',encoding='utf-8') as f:json.dump(meta,f,ensure_ascii=False)
+            os.replace(mp+'.tmp',mp)
+            return self.send_json({'ok':True,'frame_id':fid,'media_mode':media_mode})
         if path == '/api/frames/enabled':
             fid=str(data.get('frame_id') or '')
             enabled=bool(data.get('enabled',False))
@@ -4528,10 +4546,13 @@ class Handler(BaseHTTPRequestHandler):
                 if arr is None or len(arr.shape)!=3 or arr.shape[2] not in (3,4): return self.send_json({'ok':False,'error':'PNG tidak dapat dibaca.'},400)
                 if arr.shape[2]==3: return self.send_json({'ok':False,'error':'PNG harus memiliki transparansi alpha pada area foto.'},400)
                 event_id=str(data.get('event_id') or '').strip()
+                media_mode=str(data.get('media_mode') or 'photo').strip()
+                if media_mode not in ('photo','video'):
+                    return self.send_json({'ok':False,'error':'Mode frame harus foto atau video.'},400)
                 if event_id and not re.fullmatch(r'[a-f0-9]{16}',event_id): return self.send_json({'ok':False,'error':'ID event frame tidak valid.'},400)
                 fid=uuid.uuid4().hex[:16]; cv2.imwrite(os.path.join(FRAMES_DIR,fid+'.png'),arr)
-                with open(os.path.join(FRAMES_DIR,fid+'.json'),'w',encoding='utf-8') as mf: json.dump({'name':name,'width':int(arr.shape[1]),'height':int(arr.shape[0]),'enabled':True,'event_id':event_id or None},mf,ensure_ascii=False)
-                return self.send_json({'ok':True,'frame':{'id':fid,'name':name,'event_id':event_id or None,'width':int(arr.shape[1]),'height':int(arr.shape[0]),'url':f'http://127.0.0.1:{PORT}/api/frames/{fid}.png'}})
+                with open(os.path.join(FRAMES_DIR,fid+'.json'),'w',encoding='utf-8') as mf: json.dump({'name':name,'width':int(arr.shape[1]),'height':int(arr.shape[0]),'enabled':True,'event_id':event_id or None,'media_mode':media_mode},mf,ensure_ascii=False)
+                return self.send_json({'ok':True,'frame':{'id':fid,'name':name,'event_id':event_id or None,'media_mode':media_mode,'width':int(arr.shape[1]),'height':int(arr.shape[0]),'url':f'http://127.0.0.1:{PORT}/api/frames/{fid}.png'}})
             except Exception as exc: return self.send_json({'ok':False,'error':f'Gagal mengimpor PNG: {exc}'},400)
         if path == '/api/video-test/start':
             with video_lock:
@@ -4729,7 +4750,7 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
                 if first_frame is None:
                     return self.send_json({'ok':False,'error':f'Preview kamera angle {angle+1} belum mengirim frame. Aktifkan preview kamera terlebih dahulu.'},409)
                 frame_id=str(data.get('frame_id') or '')
-                frame_error=event_frame_owner_error(frame_id,data.get('event_id'))
+                frame_error=event_frame_owner_error(frame_id,data.get('event_id'),'video')
                 if frame_error:return self.send_json({'ok':False,'error':frame_error},409)
                 # Reuse the existing verified checkout and voucher rules.
                 method=str(data.get('payment_method') or '')
@@ -4758,7 +4779,7 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
             except Exception as exc:
                 return self.send_json({'ok':False,'error':str(exc)},500)
         if path == '/api/session/start':
-            frame_error=event_frame_owner_error(data.get('frame_id'),data.get('event_id'))
+            frame_error=event_frame_owner_error(data.get('frame_id'),data.get('event_id'),'photo')
             if frame_error: return self.send_json({'ok':False,'error':frame_error},409)
             with session_lock:
                 if active_session and active_session.get('status') == 'active':
@@ -5000,7 +5021,7 @@ Write-Output ('PRINT_OK|'+$payload.printer+'|'+$payload.width+'x'+$payload.heigh
         if path == '/api/session/finish':
             with session_lock:
                 if active_session:
-                    frame_error=event_frame_owner_error(data.get('frame_id') or active_session.get('frame_id'),active_session.get('event_id'))
+                    frame_error=event_frame_owner_error(data.get('frame_id') or active_session.get('frame_id'),active_session.get('event_id'),'photo')
                     if frame_error: return self.send_json({'ok':False,'error':frame_error},409)
                 if not active_session or active_session.get('status') != 'active': return self.send_json({'ok':False,'error':'Belum ada sesi aktif.'},409)
                 try:
