@@ -71,7 +71,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         );
         CREATE TABLE IF NOT EXISTS gallery_preferences(
           booth_id TEXT PRIMARY KEY REFERENCES booths(id) ON DELETE CASCADE,
-          mode TEXT NOT NULL DEFAULT 'local',
+          mode TEXT NOT NULL DEFAULT 'drive',
           share TEXT NOT NULL DEFAULT 'drive'
         );
         CREATE TABLE IF NOT EXISTS gallery_sessions(
@@ -89,7 +89,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
 
     def _prefs(db,booth_id):
         row=db.execute('SELECT mode,share FROM gallery_preferences WHERE booth_id=?',(booth_id,)).fetchone()
-        return dict(row) if row else {'mode':'local','share':'drive'}
+        return dict(row) if row else {'mode':'drive','share':'drive'}
 
     def _brand(db,owner_id):
         row=db.execute('SELECT title,subtitle,accent,retention_days,logo_mime FROM gallery_brands WHERE owner_id=?',(owner_id,)).fetchone()
