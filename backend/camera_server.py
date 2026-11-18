@@ -4152,7 +4152,7 @@ class Handler(BaseHTTPRequestHandler):
             url=str(data.get('url') or '')
             parsed=urlparse(url)
             if (parsed.scheme!='https' or parsed.hostname!='kacastudio.id' or
-                not re.fullmatch(r'/session/[A-Za-z0-9_-]{32,80}',parsed.path) or parsed.query or parsed.fragment):
+                not re.fullmatch(r'/(?:api/public/)?session/[A-Za-z0-9_-]{32,80}',parsed.path) or parsed.query or parsed.fragment):
                 return self.send_json({'ok':False,'error':'Tautan hasil web tidak valid.'},400)
             if not re.fullmatch(r'[A-Za-z0-9_-]{6,100}',sid):
                 return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)

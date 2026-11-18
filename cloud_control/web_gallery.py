@@ -104,7 +104,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             'booth_id':row['booth_id'],'session_id':row['session_id'],
             'mode':row['mode'],'event_name':row['event_name'],
             'created_at':row['created_at'],'expires_at':row['expires_at'],
-            'url':public_origin+'/session/'+row['token'],
+            'url':public_origin+'/api/public/session/'+row['token'],
             'has_preview':bool(row['preview_path']),
             'has_archive':bool(row['archive_path']),
             'has_video':bool(row['video_path']),
@@ -288,6 +288,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         return r,brand,owner_id
 
     @app.get('/session/{token}',response_class=HTMLResponse)
+    @app.get('/api/public/session/{token}',response_class=HTMLResponse)
     def public_session(token:str):
         row,brand,owner_id=_token_lookup(token)
         label=html.escape(brand['title'])
@@ -297,10 +298,10 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         safe_token=html.escape(token)
         media=('video' if row['video_path'] and row['mode']=='VIDEO' else 'preview')
         if _safe_file(row,media):
-            view=('<video controls playsinline preload="metadata" src="/session/'+safe_token+'/media"></video>'
-                  if media=='video' else '<img alt="Hasil foto sesi" src="/session/'+safe_token+'/media">')
+            view=('<video controls playsinline preload="metadata" src="/api/public/session/'+safe_token+'/media"></video>'
+                  if media=='video' else '<img alt="Hasil foto sesi" src="/api/public/session/'+safe_token+'/media">')
         else:view='<p>File hasil masih diproses.</p>'
-        logo=('<img class="brand-logo" alt="Logo studio" src="/session-brand/'+html.escape(owner_id)+'/logo">'
+        logo=('<img class="brand-logo" alt="Logo studio" src="/api/public/brand/'+html.escape(owner_id)+'/logo">'
               if brand['logo_mime'] else '')
         body=f'''<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{label} — Hasil Sesi</title>
@@ -314,13 +315,14 @@ a,button{{background:{color};color:white;border:0;border-radius:10px;padding:13p
 @media print{{header,.actions,.small{{display:none}}body{{background:white}}main,.card{{margin:0;padding:0;border:0;box-shadow:none}}img{{max-height:none}}}}
 </style></head><body><main><header>{logo}<h1>{label}</h1><p class="small">{sub}</p></header>
 <section class="card"><h2>{title}</h2>{view}
-<div class="actions"><a href="/session/{safe_token}/download">Unduh Hasil</a><button onclick="window.print()">Cetak Foto</button></div>
+<div class="actions"><a href="/api/public/session/{safe_token}/download">Unduh Hasil</a><button onclick="window.print()">Cetak Foto</button></div>
 <p class="small">Tautan privat: siapa pun yang menerima link/QR ini dapat melihat hasil sampai kedaluwarsa.</p>
 </section></main></body></html>'''
         return HTMLResponse(body,headers={'Cache-Control':'no-store','Content-Security-Policy':
             "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"})
 
     @app.get('/session-brand/{owner_id}/logo')
+    @app.get('/api/public/brand/{owner_id}/logo')
     def brand_logo(owner_id:str):
         with closing_sql() as db:
             row=db.execute('SELECT logo,logo_mime FROM gallery_brands WHERE owner_id=?',(owner_id,)).fetchone()
@@ -329,6 +331,7 @@ a,button{{background:{color};color:white;border:0;border-radius:10px;padding:13p
                         headers={'Cache-Control':'public,max-age=300'})
 
     @app.get('/session/{token}/media')
+    @app.get('/api/public/session/{token}/media')
     def public_media(token:str):
         row,_,_=_token_lookup(token)
         kind='video' if row['mode']=='VIDEO' and row['video_path'] else 'preview'
@@ -337,6 +340,7 @@ a,button{{background:{color};color:white;border:0;border-radius:10px;padding:13p
         return FileResponse(file,media_type=MIME[kind],headers={'Cache-Control':'private,no-store'})
 
     @app.get('/session/{token}/download')
+    @app.get('/api/public/session/{token}/download')
     def public_download(token:str):
         row,_,_=_token_lookup(token)
         kind='archive' if row['archive_path'] else ('video' if row['video_path'] else 'preview')

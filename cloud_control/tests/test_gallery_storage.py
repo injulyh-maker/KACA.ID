@@ -72,15 +72,15 @@ class GalleryCloudTests(unittest.TestCase):
                     content=preview,headers={**self.bh,'Content-Type':'application/octet-stream'})
         self.assertEqual(uploaded.status_code,200,uploaded.text)
         item=uploaded.json()
-        self.assertTrue(item['url'].startswith('https://kacastudio.id/session/'))
+        self.assertTrue(item['url'].startswith('https://kacastudio.id/api/public/session/'))
         token=item['url'].split('/')[-1]
         self.assertGreater(len(token),35)
-        public=self.client.get('/session/'+token)
+        public=self.client.get('/api/public/session/'+token)
         self.assertEqual(public.status_code,200,public.text)
         self.assertIn('KACA Poso',public.text)
         self.assertIn('Cetak Foto',public.text)
         self.assertIn('#cc8844',public.text)
-        media=self.client.get('/session/'+token+'/media')
+        media=self.client.get('/api/public/session/'+token+'/media')
         self.assertEqual(media.status_code,200)
         self.assertEqual(media.content,preview)
         self.assertEqual(self.client.get('/session/not-a-valid-token').status_code,404)
@@ -93,7 +93,7 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertEqual(denied.status_code,400)
         removed=self.client.delete('/api/gallery/'+self.booth['booth_id']+'/'+sid,headers=self.oh)
         self.assertEqual(removed.status_code,200,removed.text)
-        self.assertEqual(self.client.get('/session/'+token).status_code,404)
+        self.assertEqual(self.client.get('/api/public/session/'+token).status_code,404)
 
     def test_non_existent_media_rejected(self):
         r=self.client.post('/api/agent/gallery/../../../bad/upload?kind=video',content=b'\x00'*100,headers=self.bh)
