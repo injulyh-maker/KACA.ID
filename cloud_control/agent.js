@@ -298,6 +298,11 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
     if(done[kind]){
       if(!video&&!done.archive){
         try{
+          // Wait for the final frame/Live Photo render before publishing the ZIP.
+          // Otherwise the first archive can permanently miss the Live Photo.
+          const render=await localJSON('/api/session/'+encodeURIComponent(sid)+'/render-status');
+          if(render.render_status!=='ready'||(render.live_photo_enabled&&!render.live_output_available))
+            break;
           await uploadLocalGalleryAsset(sid,'archive','PHOTO',item.event_name);
           outbox.webSynced[sid].archive=true;atomicJSON(outboxFile,outbox);
         }catch(err){log('warn','Arsip ZIP web ditunda: '+err.message);}
