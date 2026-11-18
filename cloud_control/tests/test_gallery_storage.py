@@ -86,6 +86,13 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertEqual(self.client.get('/session/not-a-valid-token').status_code,404)
         listing=self.client.get('/api/gallery',headers=self.oh).json()
         self.assertEqual(listing['total'],1)
+        self.assertGreaterEqual(listing['storage_used_bytes'],len(preview))
+        day=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).date().isoformat()
+        date_rows=self.client.get('/api/gallery',params={'date_from':day,'date_to':day,'sort':'oldest'},headers=self.oh)
+        self.assertEqual(date_rows.status_code,200,date_rows.text)
+        self.assertEqual(date_rows.json()['total'],1)
+        self.assertEqual(self.client.get('/api/gallery?sort=invalid',headers=self.oh).status_code,400)
+        self.assertEqual(self.client.get('/api/gallery?date_from=2026-99-99',headers=self.oh).status_code,400)
         unauth=self.client.get('/api/gallery')
         self.assertEqual(unauth.status_code,401)
         denied=self.client.post('/api/gallery/preferences',headers=self.oh,
