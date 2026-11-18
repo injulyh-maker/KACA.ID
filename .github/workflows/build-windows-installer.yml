@@ -54,13 +54,13 @@ jobs:
           # package-lock.json in older snapshots is incomplete; install and
           # reconcile dependencies on the isolated CI runner for this build.
           npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Validate Web Gallery and Cloud storage controls
+      - name: Validate Web QR and customer gallery assets
         shell: pwsh
         run: |
           node --check src/app.js
           node --check preload.js
           node --check cloud_control/agent.js
-          ./runtime/python/python.exe -I -m py_compile cloud_control/web_gallery.py
+          ./runtime/python/python.exe -I -m py_compile cloud_control/web_gallery.py backend/camera_server.py
           node -e "const fs=require('fs'); const ui=fs.readFileSync('src/app.js','utf8'); const agent=fs.readFileSync('cloud_control/agent.js','utf8'); if(!ui.includes('Penyimpanan Web KACA.ID')||!ui.includes('cloudSaveGalleryPreferences')||!agent.includes('cloud:gallery-save-preferences')) process.exit(1);"
       - name: Test offline signed license
         shell: pwsh
