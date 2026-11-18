@@ -431,6 +431,16 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                           'name':item['name'],'url':'/api/public/session/'+token+'/assets/'+str(i)}
                           for i,item in enumerate(items)]}
 
+    @app.get('/api/public/session/{token}/state')
+    def public_session_state(token:str):
+        row,_,_=_token_lookup(token)
+        archive_items=_archive_items(row)
+        count=len(archive_items) or int(bool(_safe_file(row,'preview')))
+        if row['mode']=='VIDEO' and _safe_file(row,'video'):count+=1
+        return {'ok':True,'item_count':count,
+                'archive_ready':bool(row['archive_path']),
+                'video_ready':bool(row['video_path'])}
+
     @app.get('/session/{token}',response_class=HTMLResponse)
     @app.get('/api/public/session/{token}',response_class=HTMLResponse)
     def public_session(token:str):
@@ -466,6 +476,8 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                          '<a class="download" href="'+src+'" download>↓ Unduh Video</a></div></article>')
         if not cards:
             cards.append('<div class="empty">File sesi sedang dipersiapkan. Muat ulang setelah beberapa saat.</div>')
+        initial_count=len(items) or int(bool(_safe_file(row,'preview')))
+        if row['mode']=='VIDEO' and _safe_file(row,'video'):initial_count+=1
         logo=('<img class="brand-logo" alt="Logo Studio" src="/api/public/brand/'+html.escape(owner_id)+'/logo">'
               if brand['logo_mime'] else '<div class="brand-logo brand-fallback">K</div>')
         page="""<!doctype html><html lang="id"><head><meta charset="utf-8">
@@ -524,6 +536,18 @@ document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click'
  const category=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));
  document.querySelectorAll('.media-card').forEach(c=>c.hidden=category!=='all'&&c.dataset.kind!==category);
 }));
+// The QR can be scanned before the ZIP is uploaded. Refresh automatically
+// when the remaining originals, GIF or Live Photo arrive on this same link.
+let galleryPolls=0;
+const galleryWait=setInterval(async()=>{
+ if(++galleryPolls>45){clearInterval(galleryWait);return;}
+ try{
+  const response=await fetch('/api/public/session/__TOKEN__/state',{cache:'no-store'});
+  if(!response.ok)return;
+  const state=await response.json();
+  if(state.item_count>__COUNT__){clearInterval(galleryWait);location.reload();}
+ }catch(e){}
+},4000);
 document.getElementById('shareLink').addEventListener('click',async()=>{
  if(navigator.share){try{await navigator.share({title:document.title,url:location.href});return;}catch(e){}}
  try{await navigator.clipboard.writeText(location.href);alert('Link hasil berhasil disalin.');}
@@ -534,7 +558,7 @@ document.getElementById('shareLink').addEventListener('click',async()=>{
                .replace('__SUBTITLE__',sub).replace('__SESSION_NAME__',session_label)
                .replace('__SESSION_ID__',html.escape(row['session_id']))
                .replace('__LOGO__',logo).replace('__TOKEN__',token)
-               .replace('__CARDS__',''.join(cards)))
+               .replace('__CARDS__',''.join(cards)).replace('__COUNT__',str(initial_count)))
         return HTMLResponse(page,headers={'Cache-Control':'private,no-store','Content-Security-Policy':
             "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"})
 
