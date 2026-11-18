@@ -225,6 +225,18 @@ doku_qris = DokuQris(DATA_DIR)
 midtrans_snap = MidtransSnap(DATA_DIR)
 fonnte_gateway = FonnteGateway(DATA_DIR)
 
+VIDEO_WEB_LINKS_PATH = os.path.join(DATA_DIR,'video-web-links.json')
+try:
+    with open(VIDEO_WEB_LINKS_PATH,encoding='utf-8') as _vf:
+        video_web_links=json.load(_vf)
+    if not isinstance(video_web_links,dict):video_web_links={}
+except (OSError,ValueError,TypeError):
+    video_web_links={}
+def _save_video_web_links():
+    tmp=VIDEO_WEB_LINKS_PATH+'.tmp'
+    with open(tmp,'w',encoding='utf-8') as f:json.dump(video_web_links,f)
+    os.replace(tmp,VIDEO_WEB_LINKS_PATH)
+
 MEDIA_STORAGE_POLICY_PATH = os.path.join(DATA_DIR, 'media-storage-policy.json')
 try:
     with open(MEDIA_STORAGE_POLICY_PATH,encoding='utf-8') as _pf:
@@ -1772,6 +1784,16 @@ def stop_booth_video():
     # already durable and its Google Drive upload is not blocked by encoding.
     threading.Thread(target=build_booth_video_webm_preview,args=(video_id,path),daemon=True).start()
     drive_job = enqueue_drive_job('video', local_path, 'Video_'+video_id, video_id, event_id=event_id) if local_path else None
+    # Keep the QR URL reserved when the video started, even if Drive creates a fresh job.
+    reserved_url=video_web_links.get(video_id)
+    if reserved_url:
+        with drive_jobs_lock:
+            current=dict(drive_jobs.get(video_id) or {'id':video_id,'kind':'video'})
+            current['web_url']=reserved_url
+            current['local_path']=current.get('local_path') or local_path or path
+            _write_video_drive_qr(current)
+            drive_jobs[video_id]=current
+            _save_drive_jobs()
     return {'ok': True, 'id': video_id, 'duration_seconds': round(duration, 2), 'frames': frames, 'size_bytes': os.path.getsize(path), 'url': f'http://127.0.0.1:{PORT}/api/video/{video_id}.mp4', 'local_path': local_path, 'drive_job_id': video_id if drive_job else None, 'frame_id': frame_id, 'drive_status': drive_job.get('status') if drive_job else 'local_only', 'archive_warning': None if local_path else 'Video tersimpan pada data aplikasi, tetapi gagal disalin ke folder arsip lokal.'}
 
 
@@ -3642,8 +3664,8 @@ class Handler(BaseHTTPRequestHandler):
             video_id = video_qr_match.group(1)
             with drive_jobs_lock:
                 video_job = dict(drive_jobs.get(video_id) or {})
-            if video_job.get('kind') != 'video' or not video_job.get('url') or video_job.get('drive_deleted_at'):
-                return self.send_json({'ok':False,'error':'QR Google Drive video belum tersedia.'},404)
+            if video_job.get('kind') != 'video' or not _preferred_share_url({'web_url':video_job.get('web_url'),'drive_url':video_job.get('url')}) or video_job.get('drive_deleted_at'):
+                return self.send_json({'ok':False,'error':'QR tautan video belum tersedia.'},404)
             qr_path = video_job.get('qr_path')
             if not qr_path or not os.path.isfile(qr_path):
                 return self.send_json({'ok':False,'error':'QR Google Drive video belum dibuat.'},404)
@@ -4181,15 +4203,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
             if video:
                 vid=sid.removeprefix('video-')
+                if not re.fullmatch(r'[a-f0-9]{12}',vid):
+                    return self.send_json({'ok':False,'error':'ID video tidak valid.'},400)
                 with drive_jobs_lock:
+                    video_web_links[vid]=url
+                    _save_video_web_links()
                     job=dict(drive_jobs.get(vid) or {})
-                    if not job or job.get('kind')!='video':
-                        return self.send_json({'ok':False,'error':'Video belum ada.'},404)
+                    if not job:
+                        job={'id':vid,'kind':'video','local_path':os.path.join(DATA_DIR,'video_sessions',vid+'.mp4'),
+                             'status':'recording'}
                     job['web_url']=url
-                    _write_video_drive_qr(job)
+                    if not job.get('local_path'):
+                        job['local_path']=os.path.join(DATA_DIR,'video_sessions',vid+'.mp4')
+                    if media_storage_policy.get('share')=='web':
+                        _write_video_drive_qr(job)
                     drive_jobs[vid]=job
                     _save_drive_jobs()
-                return self.send_json({'ok':True,'web_url':url,'qr_available':bool(job.get('qr_path'))})
+                return self.send_json({'ok':True,'web_url':url,'qr_available':bool(job.get('qr_path') and os.path.isfile(job['qr_path']))})
             manifest=read_manifest(sid)
             if not manifest:return self.send_json({'ok':False,'error':'Sesi foto tidak ditemukan.'},404)
             manifest['web_url']=url
