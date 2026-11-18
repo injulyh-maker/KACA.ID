@@ -194,7 +194,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             for key,value in (('from',date_from),('to',date_to)):
                 if not value:continue
                 try:
-                    if not re.fullmatch(r'\\d{4}-\\d{2}-\\d{2}',value):
+                    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}',value):
                         raise ValueError('invalid date')
                     day=date.fromisoformat(value)
                     start=int(datetime.combine(day,datetime.min.time(),tzinfo=timezone.utc).timestamp())
