@@ -353,6 +353,22 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   }catch(e){log('warn',`Cloud preview unavailable: ${e.message}`)}
  }
  // Do not overwrite operational settings from the cloud unless the operator enables cloud control.
+ ipcMain.handle('cloud:gallery-preferences',async()=>{
+  if(!validOffline()||!config.boothId||!config.boothKey)throw Error('Aktifkan lisensi Cloud untuk mengatur penyimpanan Web.');
+  const remote=await cloud('/agent/gallery/preferences');
+  return {mode:remote.mode,share:remote.share,boothId:config.boothId,boothName:config.boothName||''};
+ });
+ ipcMain.handle('cloud:gallery-save-preferences',async(_event,choice)=>{
+  if(!validOffline()||!config.boothId||!config.boothKey)throw Error('Lisensi Cloud belum aktif.');
+  const mode=String(choice?.mode||''),share=String(choice?.share||'');
+  if(!['local','drive','web','both'].includes(mode)||!['drive','web'].includes(share))throw Error('Pilihan penyimpanan tidak valid.');
+  if(share==='web'&&!['web','both'].includes(mode))throw Error('Untuk QR Web, aktifkan penyimpanan Web.');
+  const response=await cloud('/agent/gallery/preferences',{method:'POST',json:{booth_id:config.boothId,mode,share}});
+  await localJSON('/api/cloud/media-policy',{method:'POST',json:{mode:response.mode,share:response.share}});
+  config.storageMode=response.mode;config.shareProvider=response.share;save();
+  void sync();
+  return {mode:response.mode,share:response.share,boothId:config.boothId};
+ });
  ipcMain.handle('cloud:status',()=>status());
  ipcMain.handle('cloud:assert-license',()=>{if(!validOffline())throw Error(lastError||'Lisensi tidak aktif.');return {ok:true,expires_at:config.licenseExpires};});
  ipcMain.handle('cloud:activate',(_event,data)=>activate(data));
