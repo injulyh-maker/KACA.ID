@@ -4230,6 +4230,13 @@ class Handler(BaseHTTPRequestHandler):
                 try:_refresh_drive_qr_output(manifest)
                 except Exception as exc:print('[WEB_QR_PRINT_WARNING]',repr(exc),flush=True)
             write_manifest(manifest)
+            # Capture and finish handlers use active_session in memory: keep it in
+            # sync so they cannot overwrite the just-created QR and Web URL.
+            with session_lock:
+                if active_session and active_session.get('id')==sid:
+                    for key in ('web_url','share_url','drive_qr_available','drive_qr_path',
+                                'drive_qr_archive_path','qr_url_fingerprint','print_qr_ready'):
+                        if key in manifest:active_session[key]=manifest[key]
             return self.send_json({'ok':True,'web_url':url,'qr_available':bool(manifest.get('drive_qr_available'))})
         if path == '/api/retention/config':
             try:
