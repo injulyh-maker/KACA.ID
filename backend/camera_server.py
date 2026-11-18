@@ -1358,7 +1358,7 @@ def _blend_drive_qr(canvas, session):
         left = max(0, min(cw-size, left)); top = max(0, min(ch-size, top)); size = min(size, cw-left, ch-top)
         import qrcode
         qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=1, border=4)
-        qr.add_data(str(session['drive_url'])); qr.make(fit=True)
+        qr.add_data(_preferred_share_url(session)); qr.make(fit=True)
         matrix = __import__('numpy').asarray(qr.get_matrix(), dtype='uint8')
         qr_img = cv2.resize((255 - matrix*255), (size, size), interpolation=cv2.INTER_NEAREST)
         canvas[top:top+size, left:left+size] = cv2.cvtColor(qr_img, cv2.COLOR_GRAY2BGR)
