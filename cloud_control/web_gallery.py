@@ -257,6 +257,28 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
                     (b['id'],body.mode,body.share))
         return {'ok':True,'mode':body.mode,'share':body.share}
 
+    @app.post('/api/agent/gallery/{session_id}/reserve')
+    def reserve_gallery_session(session_id:str,mode:str=Query(default='PHOTO'),
+                                event_name:str=Query(default='',max_length=100),b=Depends(agent_auth)):
+        """Reserve the public URL before capture finishes; uploads reuse this token."""
+        if not SESSION_RE.fullmatch(session_id):raise HTTPException(400,'ID sesi tidak valid.')
+        if mode not in ('PHOTO','VIDEO'):raise HTTPException(400,'Mode sesi tidak valid.')
+        with transaction() as db:
+            prefs=_prefs(db,b['id'])
+            if prefs['mode'] not in ('web','both'):
+                raise HTTPException(403,'Penyimpanan Web belum aktif.')
+            record=_row(db,b['id'],session_id)
+            if not record:
+                brand=_brand(db,b['owner_id'])
+                now=unix()
+                db.execute('''INSERT INTO gallery_sessions
+                  (booth_id,session_id,token,mode,event_name,created_at,expires_at)
+                  VALUES(?,?,?,?,?,?,?)''',
+                  (b['id'],session_id,secrets.token_urlsafe(32),mode,event_name[:100],
+                   now,now+brand['retention_days']*86400))
+                record=_row(db,b['id'],session_id)
+        return {'ok':True,**_public(record)}
+
     @app.post('/api/agent/gallery/{session_id}/upload')
     async def upload_gallery(session_id:str,request:Request,kind:str=Query(default='preview'),mode:str=Query(default='PHOTO'),
                              event_name:str=Query(default='',max_length=100),b=Depends(agent_auth)):
