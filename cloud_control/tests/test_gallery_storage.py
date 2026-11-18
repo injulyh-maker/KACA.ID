@@ -76,6 +76,7 @@ class GalleryCloudTests(unittest.TestCase):
         reserved_url=reserved.json()['url']
         self.assertIn('/session/',reserved_url)
         self.assertEqual(self.client.get('/session/'+reserved_url.rsplit('/',1)[-1]).status_code,200)
+        self.assertEqual(self.client.get('/api/public/session/'+reserved_url.rsplit('/',1)[-1]+'/state').json()['item_count'],0)
         uploaded=self.client.post('/api/agent/gallery/'+sid+'/upload?kind=preview&mode=PHOTO&event_name=Wedding',
                     content=preview,headers={**self.bh,'Content-Type':'application/octet-stream'})
         self.assertEqual(uploaded.status_code,200,uploaded.text)
@@ -102,6 +103,7 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertEqual(entries.status_code,200,entries.text)
         self.assertEqual({entry['category'] for entry in entries.json()['items']},
                          {'original','frame','gif','live'})
+        self.assertEqual(self.client.get('/api/public/session/'+token+'/state').json()['item_count'],4)
         for entry in entries.json()['items']:
             self.assertEqual(self.client.get(entry['url']).status_code,200)
         rendered=self.client.get('/session/'+token)
