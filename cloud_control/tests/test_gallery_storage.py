@@ -1,5 +1,7 @@
 """End-to-end gallery and license smoke test with fake media, no external network."""
 import os
+import io
+import zipfile
 from pathlib import Path
 import sys
 import tempfile
@@ -72,14 +74,36 @@ class GalleryCloudTests(unittest.TestCase):
                     content=preview,headers={**self.bh,'Content-Type':'application/octet-stream'})
         self.assertEqual(uploaded.status_code,200,uploaded.text)
         item=uploaded.json()
-        self.assertTrue(item['url'].startswith('https://kacastudio.id/api/public/session/'))
+        self.assertTrue(item['url'].startswith('https://kacastudio.id/session/'))
         token=item['url'].split('/')[-1]
         self.assertGreater(len(token),35)
         public=self.client.get('/api/public/session/'+token)
         self.assertEqual(public.status_code,200,public.text)
         self.assertIn('KACA Poso',public.text)
-        self.assertIn('Cetak Foto',public.text)
+        self.assertIn('Download Your Photos',public.text)
         self.assertIn('#cc8844',public.text)
+        memory=io.BytesIO()
+        with zipfile.ZipFile(memory,'w',zipfile.ZIP_STORED) as z:
+            z.writestr('Photos/Foto_01_Original.jpg',bytes([255,216,255])+b'photo')
+            z.writestr('Final_Results/Hasil_Frame.jpg',bytes([255,216,255])+b'frame')
+            z.writestr('Final_Results/GIF_Originals.gif',b'GIF89a'+b'0'*128)
+            z.writestr('Live_Photos/Live_Photo_Frame.mp4',bytes([0,0,0,24])+b'ftyp'+b'0'*48)
+        saved=self.client.post('/api/agent/gallery/'+sid+'/upload?kind=archive&mode=PHOTO',
+                               content=memory.getvalue(),headers=self.bh)
+        self.assertEqual(saved.status_code,200,saved.text)
+        entries=self.client.get('/api/public/session/'+token+'/items')
+        self.assertEqual(entries.status_code,200,entries.text)
+        self.assertEqual({entry['category'] for entry in entries.json()['items']},
+                         {'original','frame','gif','live'})
+        for entry in entries.json()['items']:
+            self.assertEqual(self.client.get(entry['url']).status_code,200)
+        rendered=self.client.get('/session/'+token)
+        self.assertIn('Foto Original',rendered.text)
+        self.assertIn('Live Photo',rendered.text)
+        self.assertIn('GIF',rendered.text)
+        changed=self.client.post('/api/agent/gallery/preferences',headers=self.bh,
+                       json={'booth_id':self.booth['booth_id'],'mode':'both','share':'web'})
+        self.assertEqual(changed.status_code,200,changed.text)
         media=self.client.get('/api/public/session/'+token+'/media')
         self.assertEqual(media.status_code,200)
         self.assertEqual(media.content,preview)
