@@ -52,7 +52,7 @@ function atomicJSON(file,obj){fs.mkdirSync(path.dirname(file),{recursive:true});
 function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
  const userDir=app.getPath('userData');const configFile=path.join(userDir,'kaca-cloud-agent.json');
  const outboxFile=path.join(userDir,'kaca-cloud-outbox.json');
- let config={},outbox={pending:{},synced:{}},remoteUntil=0,busy=false,lastError='',lastSync=0;
+ let config={},outbox={pending:{},synced:{}},remoteUntil=0,busy=false,webUploadBusy=false,lastError='',lastSync=0;
  let onRemoteFrame=null,remoteTimer=null,configWin=null,lastInput=0;
  try{config=JSON.parse(fs.readFileSync(configFile,'utf8'))}catch{}
  // Published installers require a valid signed license even when disconnected.
@@ -270,7 +270,9 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   });
  }
  async function uploadGallerySessions(preferences){
-  if(!['web','both'].includes(preferences.mode))return;
+  if(webUploadBusy||!['web','both'].includes(preferences.mode))return;
+  webUploadBusy=true;
+  try{
   const photos=await localJSON('/api/sessions').then(x=>x.sessions||[]).catch(()=>[]);
   const videos=await localJSON('/api/cloud/video-sessions').then(x=>x.sessions||[]).catch(()=>[]);
   // One upload per sync cycle to avoid stalling booth control and previews.
@@ -305,6 +307,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
     }
     break;
   }
+  } finally {webUploadBusy=false;}
  }
  async function sync(){
   if(busy||!validOffline()||!config.server||!config.boothKey)return;
@@ -322,7 +325,7 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
      const preferences=await cloud('/agent/gallery/preferences');
      config.storageMode=preferences.mode||'local';config.shareProvider=preferences.share||'drive';save();
      await localJSON('/api/cloud/media-policy',{method:'POST',json:{mode:config.storageMode,share:config.shareProvider}});
-     await uploadGallerySessions(preferences);
+     void uploadGallerySessions(preferences).catch(err=>log('warn','Sinkronisasi galeri web: '+err.message));
    }catch(e){log('warn','Sinkronisasi media web: '+e.message);}
    atomicJSON(outboxFile,outbox);lastSync=Date.now();lastError='';
    for(const c of r.commands||[])await processCommand(c);
