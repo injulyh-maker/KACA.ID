@@ -380,6 +380,23 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   }catch(e){log('warn',`Cloud preview unavailable: ${e.message}`)}
  }
  // Do not overwrite operational settings from the cloud unless the operator enables cloud control.
+ // Reserve a stable Web session link during capture, before any media file is ready.
+ async function reserveWebSession(sessionId,mode,eventName){
+  if(!validOffline()||!config.boothId||!config.boothKey)return {enabled:false};
+  const prefs=await cloud('/agent/gallery/preferences');
+  if(!['web','both'].includes(prefs.mode)||prefs.share!=='web')return {enabled:false};
+  const id=String(sessionId||'');
+  if(!/^[A-Za-z0-9_-]{6,100}$/.test(id)||!['PHOTO','VIDEO'].includes(mode))throw Error('ID sesi tidak valid.');
+  const reserved=await cloud('/agent/gallery/'+encodeURIComponent(id)+'/reserve?'+new URLSearchParams({mode,event_name:String(eventName||'').slice(0,100)}),{method:'POST'});
+  if(!reserved.url)throw Error('Cloud tidak menyediakan tautan sesi.');
+  outbox.webSynced[id]={...(outbox.webSynced[id]||{}),web_url:reserved.url,qr_registered:false};
+  atomicJSON(outboxFile,outbox);
+  const saved=await localJSON('/api/cloud/web-share',{method:'POST',json:{session_id:id,video:mode==='VIDEO',url:reserved.url}});
+  if(!saved.ok||!saved.qr_available)throw Error(saved.error||'QR Web belum siap pada backend lokal.');
+  outbox.webSynced[id].qr_registered=true;atomicJSON(outboxFile,outbox);
+  return {enabled:true,url:reserved.url,qr_available:true};
+ }
+ ipcMain.handle('cloud:gallery-reserve',(_event,payload)=>reserveWebSession(payload?.sessionId,payload?.mode,payload?.eventName));
  ipcMain.handle('cloud:gallery-preferences',async()=>{
   if(!validOffline()||!config.boothId||!config.boothKey)throw Error('Aktifkan lisensi Cloud untuk mengatur penyimpanan Web.');
   const remote=await cloud('/agent/gallery/preferences');
