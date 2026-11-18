@@ -4037,6 +4037,36 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok':True,'session':manifest})
         if path == '/api/retention/status':
             return self.send_json({'ok': True, **session_retention.get()})
+        if path == '/api/cloud/gallery-progress':
+            # Localhost-only Cloud Agent: poll in-progress photos without waiting
+            # for the result slide. The preview/final assets join the same album.
+            items=[]
+            try:session_ids=sorted(os.listdir(SESSIONS_DIR),reverse=True)
+            except OSError:session_ids=[]
+            for sid in session_ids[:40]:
+                if not re.fullmatch(r'[A-Za-z0-9_-]{6,64}',sid):continue
+                manifest=read_manifest(sid)
+                if not manifest or manifest.get('status') not in ('active','finished') or manifest.get('local_deleted_at'):continue
+                folder=os.path.join(SESSIONS_DIR,sid)
+                signatures=[]
+                names=[]
+                for photo in manifest.get('photos',[]):
+                    original=str(photo.get('original') or '')
+                    if re.fullmatch(r'original_\\d+\\.jpg',original):names.append(original)
+                names.extend(('output.jpg','originals.gif','output_live.mp4','output_live.webm'))
+                for filename in names:
+                    fp=os.path.join(folder,filename)
+                    try:
+                        stat=os.stat(fp)
+                        if stat.st_size>=64:
+                            signatures.append((filename,stat.st_size,stat.st_mtime_ns))
+                    except OSError:pass
+                if not signatures:continue
+                revision=hashlib.sha256(json.dumps(signatures,separators=(',',':')).encode()).hexdigest()
+                items.append({'id':sid,'mode':'PHOTO','event_name':manifest.get('event_name') or '',
+                              'status':manifest.get('status'),'revision':revision,
+                              'assets':len(signatures),'created_at':manifest.get('created_at','')})
+            return self.send_json({'ok':True,'sessions':items})
         if path == '/api/sessions':
             items = []
             try:
@@ -4060,12 +4090,12 @@ class Handler(BaseHTTPRequestHandler):
             if not sid.replace('-', '').isalnum(): return self.send_json({'ok':False,'error':'ID sesi tidak valid.'},400)
             folder = os.path.join(SESSIONS_DIR, sid)
             manifest = read_manifest(sid)
-            if not manifest or manifest.get('status') != 'finished': return self.send_json({'ok':False,'error':'Sesi belum selesai.'},404)
+            if not manifest or manifest.get('status') not in ('active','finished'): return self.send_json({'ok':False,'error':'Sesi belum tersedia.'},404)
             archive_path = manifest.get('local_archive_path')
             # Always assemble the most recent completed assets. A ZIP written
             # before Live Photo rendering finished may otherwise remain incomplete.
             zip_path=os.path.join(folder,'KACA-ID-Web-Hasil-Sesi.zip')
-            temp_zip=zip_path+'.tmp'
+            temp_zip=zip_path+'.'+uuid.uuid4().hex+'.tmp'
             try:
                 with zipfile.ZipFile(temp_zip,'w',compression=zipfile.ZIP_STORED) as bundle:
                     added=set()
