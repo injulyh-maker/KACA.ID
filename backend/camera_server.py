@@ -4062,22 +4062,35 @@ class Handler(BaseHTTPRequestHandler):
             manifest = read_manifest(sid)
             if not manifest or manifest.get('status') != 'finished': return self.send_json({'ok':False,'error':'Sesi belum selesai.'},404)
             archive_path = manifest.get('local_archive_path')
-            archive_zip = os.path.join(archive_path, 'KACA-ID-Hasil-Sesi.zip') if archive_path else ''
-            zip_path = archive_zip if archive_zip and os.path.isfile(archive_zip) else os.path.join(folder, 'KACA-ID-Hasil-Sesi.zip')
+            # Always assemble the most recent completed assets. A ZIP written
+            # before Live Photo rendering finished may otherwise remain incomplete.
+            zip_path=os.path.join(folder,'KACA-ID-Web-Hasil-Sesi.zip')
+            temp_zip=zip_path+'.tmp'
             try:
-                if zip_path == os.path.join(folder, 'KACA-ID-Hasil-Sesi.zip'):
-                    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_STORED) as bundle:
-                        def add_file(filename, arcname):
-                            full = os.path.join(folder, filename)
-                            if os.path.isfile(full): bundle.write(full, arcname)
-                        add_file('output.jpg', f'Frame/KACA-ID-{sid}-Frame.jpg')
-                        add_file('output_live.mp4', f'Live Photo dalam Frame/KACA-ID-{sid}-Live-Frame.mp4')
-                        add_file('originals.gif', f'GIF/KACA-ID-{sid}-Originals.gif')
-                        for photo in manifest.get('photos', []):
-                            original = photo.get('original', '')
-                            if re.match(r'^original_\d+\.jpg$', original):
-                                add_file(original, f'Foto Original/Foto-{int(photo.get("number", 0)):02d}.jpg')
-                self.stream_file(zip_path, 'application/zip', f'KACA-ID-{sid}-Hasil.zip'); return
+                with zipfile.ZipFile(temp_zip,'w',compression=zipfile.ZIP_STORED) as bundle:
+                    added=set()
+                    def put(file_path,arcname):
+                        if arcname in added or not os.path.isfile(file_path):return
+                        bundle.write(file_path,arcname)
+                        added.add(arcname)
+                    def local(name,archive_subdir='',archive_name=''):
+                        primary=os.path.join(folder,name)
+                        if os.path.isfile(primary):return primary
+                        if archive_path:
+                            return os.path.join(archive_path,archive_subdir,archive_name or name)
+                        return primary
+                    put(local('output.jpg','Final_Results','Hasil_Frame.jpg'),f'Frame/KACA-ID-{sid}-Frame.jpg')
+                    put(local('originals.gif','Final_Results','GIF_Originals.gif'),f'GIF/KACA-ID-{sid}-Originals.gif')
+                    put(local('output_live.mp4','Live_Photos','Live_Photo_Frame.mp4'),f'Live Photo dalam Frame/KACA-ID-{sid}-Live-Frame.mp4')
+                    put(local('output_live.webm','Live_Photos','Live_Photo_Frame.webm'),f'Live Photo dalam Frame/KACA-ID-{sid}-Live-Frame.webm')
+                    for photo in manifest.get('photos',[]):
+                        original=photo.get('original','')
+                        if re.fullmatch(r'original_\d+\.jpg',str(original)):
+                            num=int(photo.get('number',0))
+                            put(local(original,'Photos',f'Foto_{num:02d}_Original.jpg'),f'Foto Original/Foto-{num:02d}.jpg')
+                    if not added:raise ValueError('Media belum tersedia, arsip ditunda.')
+                os.replace(temp_zip,zip_path)
+                self.stream_file(zip_path,'application/zip',f'KACA-ID-{sid}-Hasil.zip');return
             except Exception as exc:
                 return self.send_json({'ok':False,'error':f'Gagal membuat ZIP hasil: {exc}'},500)
         if path.startswith('/api/session/') and path.endswith('/output-print-qr.jpg'):
