@@ -1,7 +1,7 @@
 {
   "name": "kaca-id-photobooth",
-  "version": "0.9.94",
-  "description": "KACA.ID 0.9.94 publish preparation - customer-clean assets, offline signed license and results skip",
+  "version": "0.9.95",
+  "description": "KACA.ID 0.9.95 publish preparation - customer-clean assets, offline signed license and results skip",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

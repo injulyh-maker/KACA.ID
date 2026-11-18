@@ -70,6 +70,7 @@ jobs:
           node tests/windows_drive_regression_test.js
           ./runtime/python/python.exe -I backend/tests/test_payment_integrations.py
           node tests/windows_payment_modes_test.js
+          node tests/windows_gallery_frame_contract.js
           node --check main.js
           ./runtime/python/python.exe -I -m py_compile backend/doku_qris.py backend/midtrans_snap.py backend/google_drive.py
       - name: Verify source packaging and dependencies
@@ -84,10 +85,10 @@ jobs:
       - name: Upload EXE for release
         uses: actions/upload-artifact@v4
         with:
-          name: KACA-ID-Setup-0.9.94-x64
+          name: KACA-ID-Setup-0.9.95-x64
           path: |
-            dist/KACA-ID-Setup-0.9.94-x64.exe
-            dist/KACA-ID-Setup-0.9.94-x64.exe.sha256
+            dist/KACA-ID-Setup-0.9.95-x64.exe
+            dist/KACA-ID-Setup-0.9.95-x64.exe.sha256
             runtime/runtime-build-complete.json
           if-no-files-found: error
           retention-days: 30

@@ -7,7 +7,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
 pkg = json.loads((ROOT/'package.json').read_text(encoding='utf-8'))
-assert pkg['version'] == '0.9.94'
+assert pkg['version'] == '0.9.95'
 assert pkg['main'] == 'main.js'
 assert pkg['build']['asar'] is False
 assert pkg['build']['nsis']['perMachine'] is True

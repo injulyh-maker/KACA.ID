@@ -3,7 +3,7 @@ from pathlib import Path
 import json,struct
 R=Path(__file__).resolve().parent.parent
 x=json.loads((R/'package.json').read_text('utf8'))
-assert x['version']=='0.9.94'
+assert x['version']=='0.9.95'
 assert x['build']['win']['icon']=='build/icon.ico'
 assert x['build']['nsis']['installerIcon']=='build/icon.ico'
 assert x['build']['nsis']['uninstallerIcon']=='build/icon.ico'
