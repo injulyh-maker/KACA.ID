@@ -3900,10 +3900,17 @@ class Handler(BaseHTTPRequestHandler):
                          (archive_dir and (candidate.startswith(archive_dir+os.sep) or candidate==archive_dir)))
                 if allowed and candidate not in candidates: candidates.append(candidate)
             qr_bytes=None
+            # Rebuild a stale QR whenever the chosen share provider or URL changes.
+            # A Drive QR must never be reused for a Web session.
+            target_url=_preferred_share_url(manifest).strip()
+            qr_fingerprint=hashlib.sha256(target_url.encode('utf-8')).hexdigest() if target_url else ''
             qr_path=next((candidate for candidate in candidates if os.path.isfile(candidate)),None)
-            if not qr_path and _preferred_share_url(manifest):
-                _write_session_qr(manifest)
-                write_manifest(manifest)
+            if qr_path and (not target_url or manifest.get('qr_url_fingerprint')!=qr_fingerprint):
+                qr_path=None
+            if not qr_path and target_url:
+                if _write_session_qr(manifest):
+                    manifest['qr_url_fingerprint']=qr_fingerprint
+                    write_manifest(manifest)
                 candidates=[]
                 for candidate in (manifest.get('drive_qr_path'), manifest.get('drive_qr_archive_path'),
                                   os.path.join(session_dir,'google_drive_qr.png'),
@@ -3920,8 +3927,10 @@ class Handler(BaseHTTPRequestHandler):
                     qr_bytes=None
             if not qr_bytes:
                 detail=manifest.get('drive_qr_error') or manifest.get('drive_error')
-                if not manifest.get('drive_url'):
-                    detail=detail or ('Google Drive belum terhubung.' if manifest.get('drive_folder_status')=='waiting_auth' else 'Tautan folder Google Drive belum berhasil dibuat; QR belum dapat dibentuk.')
+                if not _preferred_share_url(manifest):
+                    detail=detail or ('Menunggu link Galeri Web dari Cloud.' if media_storage_policy.get('share')=='web' else 'Menunggu tautan Google Drive.')
+                elif manifest.get('qr_url_fingerprint')!=qr_fingerprint:
+                    detail=detail or 'QR untuk sumber tautan terbaru belum selesai dibuat.'
                 else:
                     detail=detail or 'Tautan folder tersedia, tetapi PNG QR belum berhasil dibuat atau disimpan.'
                 return self.send_json({'ok':False,'error':detail,'drive_folder_status':manifest.get('drive_folder_status'),'drive_status':manifest.get('drive_status'),'drive_url_available':bool(manifest.get('drive_url')),'drive_qr_path':manifest.get('drive_qr_path')},503)
@@ -3974,7 +3983,14 @@ class Handler(BaseHTTPRequestHandler):
                 if (candidate.startswith(os.path.realpath(session_dir)+os.sep) or
                     (archive_dir and candidate.startswith(archive_dir+os.sep))):
                     qr_candidates.append(candidate)
-            qr_available=any(os.path.isfile(candidate) and os.path.getsize(candidate)>0 for candidate in qr_candidates)
+            share_url=_preferred_share_url(manifest).strip()
+            qr_fingerprint=hashlib.sha256(share_url.encode('utf-8')).hexdigest() if share_url else ''
+            if share_url and manifest.get('qr_url_fingerprint')!=qr_fingerprint:
+                if _write_session_qr(manifest):
+                    manifest['qr_url_fingerprint']=qr_fingerprint
+                    write_manifest(manifest)
+            qr_available=bool(share_url and manifest.get('qr_url_fingerprint')==qr_fingerprint and any(
+                os.path.isfile(candidate) and os.path.getsize(candidate)>0 for candidate in qr_candidates))
             return self.send_json({'ok':True,'status':manifest.get('status'),'render_status':manifest.get('render_status','ready' if still_ready else 'processing'),'still_ready':still_ready,'render_error':manifest.get('render_error'),'live_photo_enabled':bool(manifest.get('live_photo_enabled')),'live_output':manifest.get('live_output') or ('output_live.mp4' if live_master_ready else None),'live_output_available':bool(live_master_ready or live_preview_ready),'live_output_preview':live_preview if live_preview_ready else None,'live_output_preview_available':live_preview_ready,'gif_output':manifest.get('gif_output'),'gif_available':os.path.isfile(os.path.join(session_dir,'originals.gif')),'output':manifest.get('output'),'local_archive_path':manifest.get('local_archive_path'),'local_archive_status':manifest.get('local_archive_status'),'drive_status':manifest.get('drive_status'),'drive_url':manifest.get('drive_url'),'web_url':manifest.get('web_url'),'share_url':_preferred_share_url(manifest),'drive_folder_status':manifest.get('drive_folder_status'),'drive_folder_id':manifest.get('drive_folder_id'),'drive_error':manifest.get('drive_error'),'drive_share_warning':manifest.get('drive_share_warning'),'drive_qr_error':manifest.get('drive_qr_error'),'drive_qr_path_available':qr_available,'drive_qr_available':qr_available,'print_qr_ready':bool(manifest.get('drive_qr_enabled') and os.path.isfile(os.path.join(session_dir,'output_print_qr.jpg'))),'print_qr_error':manifest.get('print_qr_error') or manifest.get('drive_qr_embed_error')})
         if path.startswith('/api/session/') and path.endswith('/drive-diagnostic'):
             sid=path.split('/')[-2]
@@ -4179,7 +4195,8 @@ class Handler(BaseHTTPRequestHandler):
             manifest['web_url']=url
             manifest['share_url']=_preferred_share_url(manifest)
             if media_storage_policy.get('share')=='web':
-                _write_session_qr(manifest)
+                if _write_session_qr(manifest):
+                    manifest['qr_url_fingerprint']=hashlib.sha256(url.encode('utf-8')).hexdigest()
                 try:_refresh_drive_qr_output(manifest)
                 except Exception as exc:print('[WEB_QR_PRINT_WARNING]',repr(exc),flush=True)
             write_manifest(manifest)
