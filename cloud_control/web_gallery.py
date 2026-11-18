@@ -362,24 +362,39 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         return items
 
     @app.get('/api/public/session/{token}/assets/{index}')
-    def public_archive_asset(token:str,index:int):
+    def public_archive_asset(token:str,index:int,request:Request):
         row,_,_=_token_lookup(token)
         items=_archive_items(row)
         if index<0 or index>=len(items):raise HTTPException(404,'File sesi tidak ditemukan.')
         item=items[index]
         archive=_safe_file(row,'archive')
         if not archive:raise HTTPException(404,'Arsip sesi belum tersedia.')
+        size=item['bytes']
+        start,end=0,max(0,size-1)
+        headers={'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff',
+                 'Accept-Ranges':'bytes'}
+        status=200
+        wanted=request.headers.get('range','')
+        if wanted and item['mime'].startswith('video/'):
+            match=re.fullmatch(r'bytes=(\\d+)-(\\d*)',wanted)
+            if not match:raise HTTPException(416,'Rentang video tidak valid.')
+            start=int(match.group(1))
+            end=min(size-1,int(match.group(2))) if match.group(2) else size-1
+            if start>=size or start>end:raise HTTPException(416,'Rentang video di luar ukuran.')
+            headers['Content-Range']=f'bytes {start}-{end}/{size}'
+            status=206
+        headers['Content-Length']=str(max(0,end-start+1))
         def chunks():
             with zipfile.ZipFile(archive) as z:
                 with z.open(item['filename']) as stream:
-                    remaining=item['bytes']
+                    if start:stream.seek(start)
+                    remaining=end-start+1
                     while remaining>0:
                         block=stream.read(min(65536,remaining))
                         if not block:break
                         remaining-=len(block)
                         yield block
-        return StreamingResponse(chunks(),media_type=item['mime'],
-                 headers={'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'})
+        return StreamingResponse(chunks(),media_type=item['mime'],status_code=status,headers=headers)
 
     @app.get('/api/public/session/{token}/items')
     def public_archive_items(token:str):
