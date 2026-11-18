@@ -222,7 +222,9 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
  // videos in Electron memory. Only fixed local routes and authenticated Cloud URLs.
  async function uploadLocalGalleryAsset(sid,kind,mode,eventName){
   const videoId=String(sid).replace(/^video-/,'');
-  const route=kind==='preview'?'/api/session/'+encodeURIComponent(sid)+'/output.jpg':
+  const route=kind==='preview'?(mode==='VIDEO'
+       ?'/api/video/'+encodeURIComponent(videoId)+'/poster.jpg'
+       :'/api/session/'+encodeURIComponent(sid)+'/output.jpg'):
       kind==='archive'?'/api/session/'+encodeURIComponent(sid)+'/download.zip':
       '/api/video/'+encodeURIComponent(videoId)+'.mp4';
   const limit={preview:20,archive:80,video:150}[kind]*1024*1024;
@@ -289,6 +291,13 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
           await uploadLocalGalleryAsset(sid,'archive','PHOTO',item.event_name);
           outbox.webSynced[sid].archive=true;atomicJSON(outboxFile,outbox);
         }catch(err){log('warn','Arsip ZIP web ditunda: '+err.message);}
+        break;
+      }
+      if(video&&!done.preview){
+        try{
+          await uploadLocalGalleryAsset(sid,'preview','VIDEO',item.event_name);
+          outbox.webSynced[sid].preview=true;atomicJSON(outboxFile,outbox);
+        }catch(err){log('warn','Thumbnail video web ditunda: '+err.message);}
         break;
       }
       continue;
