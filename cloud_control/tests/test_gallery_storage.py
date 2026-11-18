@@ -70,10 +70,17 @@ class GalleryCloudTests(unittest.TestCase):
         brand=self.client.post('/api/gallery/brand',headers=self.oh,json={'title':'KACA Poso','subtitle':'Galeri Event Wedding',
                                                             'accent':'#cc8844','retention_days':3})
         self.assertEqual(brand.status_code,200,brand.text)
+        reserved=self.client.post('/api/agent/gallery/'+sid+'/reserve?mode=PHOTO&event_name=Wedding',
+                                  headers=self.bh)
+        self.assertEqual(reserved.status_code,200,reserved.text)
+        reserved_url=reserved.json()['url']
+        self.assertIn('/session/',reserved_url)
+        self.assertEqual(self.client.get('/session/'+reserved_url.rsplit('/',1)[-1]).status_code,200)
         uploaded=self.client.post('/api/agent/gallery/'+sid+'/upload?kind=preview&mode=PHOTO&event_name=Wedding',
                     content=preview,headers={**self.bh,'Content-Type':'application/octet-stream'})
         self.assertEqual(uploaded.status_code,200,uploaded.text)
         item=uploaded.json()
+        self.assertEqual(item['url'],reserved_url)
         self.assertTrue(item['url'].startswith('https://kacastudio.id/session/'))
         token=item['url'].split('/')[-1]
         self.assertGreater(len(token),35)
