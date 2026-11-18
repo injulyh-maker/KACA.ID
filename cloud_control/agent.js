@@ -285,6 +285,16 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
     if(!/^[A-Za-z0-9_-]{6,100}$/.test(sid))continue;
     const video=item.mode==='VIDEO',kind=video?'video':'preview';
     const done=outbox.webSynced[sid]||{};
+    // Retry local QR registration even when the Web media upload already succeeded.
+    // Previously a transient local backend error left a permanent QR-less session.
+    if(done.web_url && !done.qr_registered){
+      try{
+        const ack=await localJSON('/api/cloud/web-share',{method:'POST',json:{
+          session_id:sid,video,url:done.web_url}});
+        if(!ack.ok)throw Error(ack.error||'Gagal membuat QR Web');
+        done.qr_registered=true;outbox.webSynced[sid]=done;atomicJSON(outboxFile,outbox);
+      }catch(err){log('warn','Ulang QR hasil Web: '+err.message);}
+    }
     if(done[kind]){
       if(!video&&!done.archive){
         try{
@@ -304,12 +314,17 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
     }
     try{
       const created=await uploadLocalGalleryAsset(sid,kind,item.mode,item.event_name);
+      let qrRegistered=false;
       if(created.url){
-        // QR is generated and persisted on the booth, never in the public server.
-        await localJSON('/api/cloud/web-share',{method:'POST',json:{
-          session_id:sid,video,url:created.url}});
+        try{
+          // QR is generated and persisted on the booth, never in the public server.
+          const ack=await localJSON('/api/cloud/web-share',{method:'POST',json:{
+            session_id:sid,video,url:created.url}});
+          if(!ack.ok)throw Error(ack.error||'Gagal menyimpan tautan QR Web');
+          qrRegistered=true;
+        }catch(err){log('warn','QR Web akan dicoba ulang: '+err.message);}
       }
-      outbox.webSynced[sid]={...done,[kind]:true,web_url:created.url};
+      outbox.webSynced[sid]={...done,[kind]:true,web_url:created.url,qr_registered:qrRegistered};
       atomicJSON(outboxFile,outbox);
     }catch(err){
       log('warn','Upload galeri web tertunda: '+String(err.message).slice(0,180));
