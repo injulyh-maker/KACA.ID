@@ -290,8 +290,11 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             brand=_brand(db,b['owner_id'])
             used=db.execute('''SELECT COALESCE(SUM(preview_bytes+archive_bytes+video_bytes),0)
                     FROM gallery_sessions WHERE booth_id=?''',(b['id'],)).fetchone()[0]
+            prior=_row(db,b['id'],session_id)
+            prior_bytes=int(prior.get(kind+'_bytes') or 0) if prior else 0
+            net_used=max(0,used-prior_bytes)
         if prefs['mode'] not in ('web','both'):raise HTTPException(403,'Penyimpanan web belum diaktifkan pemilik booth.')
-        if used>=2*1024*1024*1024:raise HTTPException(507,'Kuota booth 2 GB tercapai.')
+        if net_used>=2*1024*1024*1024:raise HTTPException(507,'Kuota booth 2 GB tercapai.')
         dest_dir=(media_root/b['id']).resolve()
         dest_dir.mkdir(parents=True,exist_ok=True)
         tmp=dest_dir/(uuid.uuid4().hex+'.part')
@@ -300,7 +303,7 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
             with tmp.open('wb') as f:
                 async for chunk in request.stream():
                     size+=len(chunk)
-                    if size>MAX_BYTES[kind] or size+used>2*1024*1024*1024:
+                    if size>MAX_BYTES[kind] or size+net_used>2*1024*1024*1024:
                         raise HTTPException(413,'File terlalu besar atau kuota booth habis.')
                     f.write(chunk)
             if size<32:raise HTTPException(400,'File hasil sesi terlalu kecil.')
