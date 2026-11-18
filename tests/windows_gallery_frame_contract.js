@@ -8,7 +8,7 @@ const gallery=fs.readFileSync('cloud_control/web_gallery.py','utf8');
 const web=fs.readFileSync('cloud_control/web/index.html','utf8');
 const css=fs.readFileSync('src/style.css','utf8');
 for(const value of ['data-frame-mode','newFrameMediaMode','videoFrameSelectionEnabled',
-  'videoFrameLayouts','f.media_mode===\\x27video\\x27','videoFrameId'])assert(app.includes(value.replace('\\x27',"'")),value);
+  'videoFrameLayouts',"f.media_mode==='video'",'videoFrameId'])assert(app.includes(value),value);
 assert(backend.includes("def event_frame_owner_error(frame_id, event_id, purpose='photo')"));
 assert(backend.includes("event_frame_owner_error(frame_id,data.get('event_id'),'video')"));
 assert(backend.includes("event_frame_owner_error(data.get('frame_id'),data.get('event_id'),'photo')"));
