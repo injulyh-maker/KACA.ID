@@ -85,6 +85,13 @@ jobs:
       - name: Verify source packaging and dependencies
         shell: pwsh
         run: ./runtime/python/python.exe -I build/test_packaging_configuration.py
+      - name: Validate latest Web QR source and asset gallery behavior
+        shell: pwsh
+        run: |
+          node --check src/app.js
+          node --check cloud_control/agent.js
+          ./runtime/python/python.exe -I -m py_compile backend/camera_server.py cloud_control/web_gallery.py
+          node -e "const fs=require('fs'); const code=fs.readFileSync('backend/camera_server.py','utf8'); const page=fs.readFileSync('cloud_control/web_gallery.py','utf8'); if(!code.includes('qr_url_fingerprint')||!page.includes('Foto Original')||!page.includes('Live Photo')) process.exit(1);"
       - name: Build Windows NSIS installer
         shell: pwsh
         run: npm run dist:win -- --publish never
