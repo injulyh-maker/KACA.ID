@@ -173,18 +173,49 @@ def attach_gallery(app, *, data, transaction, closing_sql, user_auth, agent_auth
         return {'ok':True,**body.model_dump()}
 
     @app.get('/api/gallery')
-    def gallery_list(booth_id:str='',limit:int=Query(default=24,ge=1,le=100),offset:int=Query(default=0,ge=0,le=100000),u=Depends(user_auth)):
+    def gallery_list(booth_id:str='',limit:int=Query(default=24,ge=1,le=100),
+                     offset:int=Query(default=0,ge=0,le=100000),
+                     date_from:str='',date_to:str='',sort:str='newest',
+                     u=Depends(user_auth)):
         _purge()
+        if sort not in ('newest','oldest'):
+            raise HTTPException(400,'Urutan galeri tidak valid.')
+        from datetime import date,datetime,timezone,timedelta
+        clauses=[]
+        args=[]
         with closing_sql() as db:
-            if booth_id:scope_booth(db,u,booth_id)
-            where=('WHERE g.booth_id=?' if booth_id else (
-                '' if u['role']=='superadmin' else 'WHERE b.owner_id=?'))
-            args=((booth_id,) if booth_id else (() if u['role']=='superadmin' else (u['id'],)))
-            base=' FROM gallery_sessions g JOIN booths b ON b.id=g.booth_id '+where
-            total=db.execute('SELECT COUNT(*)'+base,args).fetchone()[0]
-            rows=db.execute('SELECT g.*,b.name booth_name'+base+' ORDER BY g.created_at DESC LIMIT ? OFFSET ?',args+(limit,offset)).fetchall()
+            if booth_id:
+                scope_booth(db,u,booth_id)
+                clauses.append('g.booth_id=?')
+                args.append(booth_id)
+            elif u['role']!='superadmin':
+                clauses.append('b.owner_id=?')
+                args.append(u['id'])
+            for key,value in (('from',date_from),('to',date_to)):
+                if not value:continue
+                try:
+                    if not re.fullmatch(r'\\d{4}-\\d{2}-\\d{2}',value):
+                        raise ValueError('invalid date')
+                    day=date.fromisoformat(value)
+                    start=int(datetime.combine(day,datetime.min.time(),tzinfo=timezone.utc).timestamp())
+                except ValueError:
+                    raise HTTPException(400,'Tanggal galeri harus YYYY-MM-DD.')
+                if key=='from':
+                    clauses.append('g.created_at>=?')
+                    args.append(start)
+                else:
+                    clauses.append('g.created_at<?')
+                    args.append(start+86400)
+            condition=' WHERE '+' AND '.join(clauses) if clauses else ''
+            base=' FROM gallery_sessions g JOIN booths b ON b.id=g.booth_id'+condition
+            stats=db.execute('SELECT COUNT(*),COALESCE(SUM(g.preview_bytes+g.archive_bytes+g.video_bytes),0)'+base,tuple(args)).fetchone()
+            total,bytes_used=stats[0],stats[1]
+            order='ASC' if sort=='oldest' else 'DESC'
+            rows=db.execute('SELECT g.*,b.name booth_name'+base+
+                            ' ORDER BY g.created_at '+order+' LIMIT ? OFFSET ?',tuple(args)+(limit,offset)).fetchall()
         return {'items':[{**_public(dict(r)),'booth_name':r['booth_name']} for r in rows],
-                'total':total,'has_more':offset+len(rows)<total}
+                'total':total,'storage_used_bytes':bytes_used,
+                'has_more':offset+len(rows)<total}
 
     @app.delete('/api/gallery/{booth_id}/{session_id}')
     def delete_gallery(booth_id:str,session_id:str,u=Depends(user_auth)):
