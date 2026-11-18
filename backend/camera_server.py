@@ -386,20 +386,27 @@ def _whatsapp_worker():
             if not whatsapp_cloud.status().get('configured'):
                 job.update({'status':'error','error':'WhatsApp Cloud API belum dikonfigurasi.'})
             else:
-                with drive_jobs_lock: drive_job = dict(drive_jobs.get(job.get('reference_id') or job.get('session_id')) or {})
-                if drive_job.get('status') != 'ready' or not drive_job.get('url'):
+                reference=job.get('reference_id') or job.get('session_id')
+                with drive_jobs_lock:drive_job=dict(drive_jobs.get(reference) or {})
+                share_is_web=media_storage_policy.get('share')=='web'
+                if job.get('kind')=='video':
+                    share_url=_preferred_share_url({'web_url':drive_job.get('web_url'),'drive_url':drive_job.get('url')})
+                else:
+                    share_url=_preferred_share_url(read_manifest(reference) or {})
+                share_ready=bool(share_url and (share_is_web or drive_job.get('status')=='ready'))
+                if not share_ready:
                     job.update({'status':'waiting_drive','error':None})
                     with whatsapp_jobs_lock: whatsapp_jobs[job_id]=job; _save_whatsapp_jobs()
                     time.sleep(5)
                     whatsapp_jobs_queue.put(job_id)
                     continue
-                if drive_job.get('share_warning'):
+                if not share_is_web and drive_job.get('share_warning'):
                     job.update({'status':'error','error':'Google Drive belum mengizinkan akses berbagi publik: '+str(drive_job.get('share_warning'))})
                 else:
-                    job.update({'status':'sending','drive_url':drive_job['url'],'error':None})
+                    job.update({'status':'sending','drive_url':share_url,'error':None})
                     with whatsapp_jobs_lock: whatsapp_jobs[job_id]=job; _save_whatsapp_jobs()
                     try:
-                        sent = whatsapp_cloud.send_result_template(job['recipient'], drive_job['url'], job['session_id'])
+                        sent=whatsapp_cloud.send_result_template(job['recipient'],share_url,job['session_id'])
                         job.update({'status':'sent','message_id':sent['message_id'],'sent_at':datetime.datetime.now().isoformat(timespec='seconds'),'error':None})
                     except Exception as send_exc:
                         job.update({'status':'error','attempts':int(job.get('attempts',0))+1,'error':str(send_exc)})
