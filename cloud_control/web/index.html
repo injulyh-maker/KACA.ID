@@ -74,7 +74,7 @@
 <section id="vouchers" class="view"><div class="card"><h2 class="section-title">Buat Voucher dari Web</h2><p class="muted">Kode voucher disinkronkan ke database booth saat perangkat kembali online; bisa tetap digunakan lokal setelah sinkron.</p><form id="voucherForm"><div class="fields"><label class="field">Booth<select id="voucherBooth" required></select></label><label class="field">Kode voucher<input id="voucherCode" minlength="4" maxlength="35" placeholder="EVENT2026" required></label><label class="field">Batas penggunaan<input id="voucherUses" type="number" value="1" min="1" max="500" required></label></div><div class="actions"><button class="btn" type="submit">Buat & Kirim Voucher</button></div></form><div class="section"><h3>Riwayat perintah voucher</h3><div id="voucherHistory" class="muted">Pilih booth untuk melihat status.</div></div></div></section>
 <section id="licenses" class="view"><div class="card"><h2 class="section-title">Daftar Lisensi Akun</h2><p class="muted">Satu lisensi diaktifkan untuk satu perangkat. Satu akun dapat menyimpan dan menggunakan banyak lisensi sekaligus.</p><div class="tablewrap"><table class="table"><thead><tr><th>Kode (disamarkan)</th><th>Berlaku Hingga</th><th>Status</th><th>Booth</th></tr></thead><tbody id="licenseRows"></tbody></table></div><div class="license-box"><b>Aktivasi di aplikasi Windows:</b><p class="muted">Buka KACA.ID → Cloud Account & Lisensi, masuk dengan email/password, masukkan kode lisensi yang diberikan Super Admin, lalu beri nama booth.</p></div></div></section>
 <section id="remote" class="view"><div class="card"><h2 class="section-title">Remote Booth</h2><p class="muted">Akses ke jendela aplikasi KACA.ID, bukan seluruh desktop komputer. Operator booth harus menyetujui akses hingga 15 menit dan dapat mencabut izin kapan saja.</p><div class="toolbar"><select id="remoteBooth"></select><button class="btn" id="requestRemote">Minta Izin Remote</button><button class="btn alt" id="stopRemote">Akhiri Remote</button><button class="btn alt" id="remoteDashboard">Buka Dashboard</button></div><img id="remoteImage" class="preview" alt="Preview remote aplikasi KACA.ID (memerlukan izin operator)"><p id="remoteStatus" class="remote-hint">Menunggu persetujuan operator booth.</p><div class="remote-buttons"><button class="btn alt sm" data-key="Escape">Esc</button><button class="btn alt sm" data-key="Tab">Tab</button><button class="btn alt sm" data-key="Enter">Enter</button><button class="btn alt sm" data-key="Backspace">Backspace</button><input id="remoteType" placeholder="Teks singkat (max 120 karakter)" maxlength="120"><button class="btn alt sm" id="sendRemoteText">Ketik</button></div><div class="warning">Remote hanya aktif setelah izin lokal. Tindakan pemilik akun dicatat, dan input tetap dibatasi pada jendela aplikasi.</div></div></section>
-<section id="admin" class="view"><div class="card" style="margin-bottom:20px"><h2 class="section-title">Harga Paket Lisensi di Website</h2><p class="muted">Isi harga rupiah untuk tiap paket. Nilai 0 berarti harga perlu ditanyakan melalui WhatsApp. Tombol pembelian langsung menuju +6281934386108.</p><div id="adminPlanEditor"></div><a href="/paket" target="_blank" rel="noopener noreferrer">Lihat halaman Paket & Harga</a></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="card"><h2 class="section-title">Buat Lisensi (Super Admin)</h2><form id="createLicenseForm"><div class="field"><label>Email Pemilik Akun</label><input id="licenseEmail" type="email" placeholder="pemilik@contoh.id" required></div><div class="field" style="margin-top:14px"><label>Masa Berlaku</label><input id="licenseDays" type="number" min="1" max="1825" step="1" value="365" list="durationPresets" required><datalist id="durationPresets"><option value="1" label="1 hari"><option value="7" label="7 hari"><option value="30" label="30 hari"><option value="90" label="90 hari"><option value="365" label="1 tahun"><option value="730" label="2 tahun"></datalist><small>Bebas mengatur durasi 1–1.825 hari.</small></div><button class="btn" style="margin-top:20px" type="submit">Terbitkan Lisensi</button></form><div id="newLicenseCode"></div></div><div class="card"><h2 class="section-title">Akun Terdaftar</h2><div class="tablewrap"><table class="table"><thead><tr><th>Email</th><th>Nama</th><th>Role</th></tr></thead><tbody id="adminUsers"></tbody></table></div></div></div><div class="card section"><h2 class="section-title">Kelola & Perpanjang Lisensi Perangkat</h2><p class="muted">Super Admin dapat menangguhkan akses Cloud booth atau mengaktifkannya kembali. <strong>Lisensi yang sudah diverifikasi offline tidak dapat dicabut seketika</strong> saat perangkat terputus internet; berlaku sampai masa berlakunya habis.</p><div class="tablewrap"><table class="table"><thead><tr><th>Pemilik Akun</th><th>Lisensi</th><th>Booth</th><th>Kedaluwarsa</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="adminLicenseRows"></tbody></table></div></div><div class="card section"><div class="toolbar"><h2 class="section-title" style="margin:0">Audit Aktivitas Admin</h2><button id="refreshAudit" class="btn alt sm">Muat Ulang Audit</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Tindakan</th><th>Booth</th><th>Detail</th></tr></thead><tbody id="adminAuditRows"></tbody></table></div></div></section>
+<section id="admin" class="view"><div class="card" style="margin-bottom:20px"><h2 class="section-title">Harga Paket Lisensi di Website</h2><p class="muted">Isi harga rupiah untuk tiap paket. Nilai 0 berarti harga perlu ditanyakan melalui WhatsApp. Tombol pembelian langsung menuju +6281934386108.</p><div id="adminPlanEditor"></div><a href="/paket" target="_blank" rel="noopener noreferrer">Lihat halaman Paket & Harga</a></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="card"><h2 class="section-title">Generate Serial Lisensi Baru</h2><p class="muted">Masa aktif bebas termasuk 1 hari. Kode serial hanya ditampilkan satu kali setelah diterbitkan.</p><form id="createLicenseForm"><div class="field"><label>Email Pemilik Akun</label><input id="licenseEmail" type="email" placeholder="pemilik@contoh.id" required></div><div class="field" style="margin-top:14px"><label>Masa Berlaku</label><input id="licenseDays" type="number" min="1" max="1825" step="1" value="365" list="durationPresets" required><datalist id="durationPresets"><option value="1" label="1 hari"><option value="7" label="7 hari"><option value="30" label="30 hari"><option value="90" label="90 hari"><option value="365" label="1 tahun"><option value="730" label="2 tahun"></datalist><small>Bebas mengatur durasi 1–1.825 hari.</small></div><button class="btn" style="margin-top:20px" type="submit">Terbitkan Lisensi</button></form><div id="newLicenseCode"></div></div><div class="card"><h2 class="section-title">Akun Terdaftar</h2><div class="tablewrap"><table class="table"><thead><tr><th>Email</th><th>Nama</th><th>Role</th></tr></thead><tbody id="adminUsers"></tbody></table></div></div></div><div class="card section"><h2 class="section-title">Perpanjang Serial Lisensi Aktif atau Kedaluwarsa</h2><p class="muted">Klik Perpanjang untuk menambah 1–1.825 hari tanpa mengganti serial maupun ikatan komputer. Pelanggan harus online sekali untuk memperbarui lisensi offline setelah perpanjangan.</p><label class="field" style="max-width:440px;margin-bottom:12px">Cari email, serial, atau booth<input id="licenseSearch" type="search" autocomplete="off" placeholder="Cari lisensi pelanggan"></label><p class="muted">Super Admin dapat menangguhkan akses Cloud booth atau mengaktifkannya kembali. <strong>Lisensi yang sudah diverifikasi offline tidak dapat dicabut seketika</strong> saat perangkat terputus internet; berlaku sampai masa berlakunya habis.</p><div class="tablewrap"><table class="table"><thead><tr><th>Pemilik Akun</th><th>Lisensi</th><th>Booth</th><th>Kedaluwarsa</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="adminLicenseRows"></tbody></table></div></div><div class="card section"><div class="toolbar"><h2 class="section-title" style="margin:0">Audit Aktivitas Admin</h2><button id="refreshAudit" class="btn alt sm">Muat Ulang Audit</button></div><div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Tindakan</th><th>Booth</th><th>Detail</th></tr></thead><tbody id="adminAuditRows"></tbody></table></div></div></section>
 </main></div><div id="toast" class="toast hidden" role="alert"></div>
 <script>
 'use strict';
@@ -263,7 +263,8 @@ async function loadAdminExtras(){
  // Harga manual: angka biasa atau satu titik pemisah; tampilan memakai format rupiah.
  const readRupiah=field=>{
    const value=String(field.value||'').trim();
-   if(!/^\d+(?:\.\d{1,3})?$/.test(value))throw Error('Masukkan angka (200000 atau 200.000); maksimal satu titik.');
+   if(!/^(?:[0-9]+|[0-9]{1,9}[.][0-9]{3})$/.test(value))
+     throw Error('Gunakan 200000 atau 200.000. Maksimal satu titik pemisah ribuan.');
    const amount=Number(value.replace('.',''));
    if(!Number.isSafeInteger(amount)||amount<0||amount>1000000000)throw Error('Harga di luar batas.');
    return amount;
@@ -288,6 +289,10 @@ async function loadAdminExtras(){
    const normalLabel=node('label','Harga Normal (Rp)','field');
    const saleLabel=node('label','Harga Promo / Harga Jual (Rp)','field');
    normalLabel.append(normal);saleLabel.append(sale);fields.append(normalLabel,saleLabel);
+   const discountLabel=node('label','Tampilkan harga asli dan label DISKON di website','field');
+   const showDiscount=document.createElement('input');showDiscount.type='checkbox';
+   showDiscount.checked=plan.show_discount!==false;showDiscount.style.width='18px';showDiscount.style.height='18px';
+   discountLabel.append(showDiscount);fields.append(discountLabel);
    const preview=node('div','','muted');preview.style.margin='7px 0 10px';
    const updatePreview=()=>{
      try{
@@ -295,7 +300,7 @@ async function loadAdminExtras(){
        if(orig&&price>orig)throw Error('Harga promo tidak boleh melebihi harga normal.');
        const saved=Math.max(0,orig-price);
        preview.textContent='Harga asli '+rp.format(orig)+' · Harga promo '+rp.format(price)+
-         (saved?' · Diskon '+rp.format(saved)+' ('+Math.round(saved*100/orig)+'%)':' · Tanpa diskon');
+         (saved&&showDiscount.checked?' · Diskon '+rp.format(saved)+' ('+Math.round(saved*100/orig)+'%)':' · Diskon disembunyikan');
      }catch(e){preview.textContent=e.message;}
    };
    updatePreview();
@@ -305,11 +310,11 @@ async function loadAdminExtras(){
      try{
        const original_price_idr=readRupiah(normal),price_idr=readRupiah(sale);
        if(original_price_idr&&price_idr>original_price_idr)throw Error('Harga promo tidak boleh lebih besar daripada harga normal.');
-       const result=await api('/admin/plans',{method:'POST',body:JSON.stringify({days:plan.days,price_idr,original_price_idr})});
+       const result=await api('/admin/plans',{method:'POST',body:JSON.stringify({days:plan.days,price_idr,original_price_idr,show_discount:showDiscount.checked})});
        notice('Harga paket '+result.days+' hari tersimpan: '+rp.format(price_idr));
      }catch(e){notice(e.message)}finally{btn.disabled=false;}
    };
-   box.append(fields,preview,btn);editor.append(box);
+   showDiscount.addEventListener('change',updatePreview);box.append(fields,preview,btn);editor.append(box);
  }
  const t=$('adminLicenseRows');clear(t);
  for(const l of licenses.licenses){const tr=document.createElement('tr');
@@ -341,6 +346,11 @@ async function loadAdminExtras(){
    };actions.append(renew);t.append(tr)
  }
  if(!licenses.licenses.length){const tr=document.createElement('tr'),td=cell(tr,'Belum ada lisensi.','empty');td.colSpan=6;t.append(tr)}
+ const filterLicenses=()=>{
+   const q=($('licenseSearch')?.value||'').toLowerCase().trim();
+   for(const row of t.querySelectorAll('tr'))row.hidden=!!q&&!row.textContent.toLowerCase().includes(q);
+ };
+ $('licenseSearch').oninput=filterLicenses;filterLicenses();
  const out=$('adminAuditRows');clear(out);
  for(const entry of audit.items){const tr=document.createElement('tr');
    cell(tr,new Date(entry.created_at*1000).toLocaleString('id-ID'));cell(tr,entry.action);
