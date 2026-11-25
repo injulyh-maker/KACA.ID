@@ -543,6 +543,46 @@ def issue_license(body:NewLicense,u=Depends(admin_auth)):
         audit(con,u['id'],'license.issued',detail=lid)
         return {'id':lid,'code':code,'expires_at':expiry,'owner_email':body.owner_email}
 
+class RenewLicense(BaseModel):
+    days:int=Field(ge=1,le=1825)
+
+@app.post('/api/admin/licenses/{license_id}/renew')
+def renew_existing_license(license_id:str,body:RenewLicense,u=Depends(admin_auth)):
+    """Extend the same serial and device binding; never expose a replacement code."""
+    with transaction() as con:
+        row=one(con,'SELECT * FROM licenses WHERE id=?',(license_id,))
+        if not row:fail('Serial lisensi tidak ditemukan',404)
+        if row['status']!='active':
+            fail('Lisensi sedang ditangguhkan. Aktifkan kembali sebelum perpanjangan.',409)
+        previous=int(row['expires_at'])
+        base=max(unix(),previous)
+        renewed=base+body.days*86400
+        con.execute('UPDATE licenses SET expires_at=? WHERE id=?',(renewed,license_id))
+        audit(con,u['id'],'license.renewed',row['booth_id'] or '',
+              f'{license_id};days={body.days};old={previous};new={renewed}')
+    return {'ok':True,'license_id':license_id,'display_code':row['display_code'],
+            'booth_id':row['booth_id'],'previous_expires_at':previous,
+            'expires_at':renewed,'added_days':body.days,
+            'notice':'Serial tidak berubah. Booth perlu terhubung ke Cloud untuk menerima lisensi offline terbaru.'}
+
+@app.post('/api/agent/license/refresh')
+def refresh_booth_signed_license(x_booth_id:str=Header(default=''),
+                                x_booth_key:str=Header(default='')):
+    # Allow expired *active* licenses to refresh after an admin renewal.
+    # Do not use agent_auth here: it rejects expired licenses.
+    if not x_booth_id or not x_booth_key:fail('Kredensial booth diperlukan',401)
+    with closing_sql() as con:
+        booth=one(con,'''SELECT b.*,l.status license_status,l.expires_at,
+                            l.id license_id FROM booths b
+                            JOIN licenses l ON l.id=b.license_id WHERE b.id=?''',(x_booth_id,))
+    if not booth or booth['license_status']!='active' or booth['expires_at']<=unix() or not secrets.compare_digest(booth['secret_hash'],hash_token(x_booth_key)):
+        fail('Lisensi belum diperpanjang atau kredensial perangkat tidak valid',401)
+    payload={'ver':1,'license_id':booth['license_id'],'booth_id':booth['id'],
+             'owner_id':booth['owner_id'],'device_hash':booth['device_hash'],
+             'iat':unix(),'exp':booth['expires_at'],'max_booths':1}
+    return {'ok':True,'offline_license':sign_license(payload),
+            'license_public_key':public_pem(),'expires_at':booth['expires_at']}
+
 class LicenseStatus(BaseModel):
     status:str
     @field_validator('status')
