@@ -178,6 +178,10 @@ def init_db():
                     raise
             for days in (1,30,90,365):
                 con.execute('INSERT OR IGNORE INTO plans(days,price_idr,updated_at) VALUES(?,?,?)',(days,0,0))
+            plan_columns=[c['name'] for c in con.execute('PRAGMA table_info(plans)').fetchall()]
+            if 'original_price_idr' not in plan_columns:
+                con.execute('ALTER TABLE plans ADD COLUMN original_price_idr INTEGER NOT NULL DEFAULT 0')
+
             usercols=[x['name'] for x in con.execute('PRAGMA table_info(users)').fetchall()]
             if 'email_verified_at' not in usercols:
                 # Existing production customers keep their access and all original data.
@@ -279,13 +283,22 @@ def index():return (ROOT/'web'/'index.html').read_text('utf-8')
 @app.get('/api/public/plans')
 def public_plans():
     with closing_sql() as con:
-        rows=many(con,'SELECT days,price_idr FROM plans ORDER BY days')
-    return {'plans':[{'days':r['days'],'price_idr':r['price_idr'] if r['price_idr']>0 else None} for r in rows],
-            'whatsapp':'6281934386108'}
+        rows=many(con,'SELECT days,price_idr,original_price_idr FROM plans ORDER BY days')
+    plans=[]
+    for r in rows:
+        price=int(r['price_idr'] or 0)
+        original=max(price,int(r['original_price_idr'] or 0))
+        discount=max(0,original-price) if price>0 else 0
+        plans.append({'days':r['days'],'price_idr':price if price>0 else None,
+                      'original_price_idr':original if original>price and price>0 else None,
+                      'discount_idr':discount,
+                      'discount_percent':round(discount*100/original) if discount and original else 0})
+    return {'plans':plans,'whatsapp':'6281934386108'}
 
 class PlanPrice(BaseModel):
     days:int
     price_idr:int=Field(ge=0,le=1000000000)
+    original_price_idr:int=Field(default=0,ge=0,le=1000000000)
 
 @app.get('/paket',response_class=HTMLResponse)
 def public_packages():
@@ -331,15 +344,20 @@ def admin_auth(user=Depends(user_auth)):
 
 @app.get('/api/admin/plans')
 def admin_plans(u=Depends(admin_auth)):
-    with closing_sql() as con:return {'plans':many(con,'SELECT days,price_idr,updated_at FROM plans ORDER BY days')}
+    with closing_sql() as con:return {'plans':many(con,'SELECT days,price_idr,original_price_idr,updated_at FROM plans ORDER BY days')}
 
 @app.post('/api/admin/plans')
 def set_plan_price(body:PlanPrice,u=Depends(admin_auth)):
     if body.days not in (1,30,90,365):fail('Durasi paket tidak didukung',400)
+    if body.original_price_idr and body.price_idr>body.original_price_idr:
+        fail('Harga promo tidak boleh lebih mahal dari harga normal',400)
     with transaction() as con:
-        con.execute('UPDATE plans SET price_idr=?,updated_at=? WHERE days=?',(body.price_idr,unix(),body.days))
+        con.execute('''UPDATE plans SET price_idr=?,original_price_idr=?,updated_at=? WHERE days=?''',
+                    (body.price_idr,body.original_price_idr,unix(),body.days))
         audit(con,u['id'],'plan.price_updated',detail=f'{body.days} days')
-    return {'ok':True,'days':body.days,'price_idr':body.price_idr}
+    original=max(body.price_idr,body.original_price_idr)
+    return {'ok':True,'days':body.days,'price_idr':body.price_idr,
+            'original_price_idr':original,'discount_idr':max(0,original-body.price_idr)}
 
 def scope_booth(con, user, booth_id):
     booth=one(con,'SELECT * FROM booths WHERE id=?',(booth_id,))
