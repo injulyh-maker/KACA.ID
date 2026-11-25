@@ -24,3 +24,5 @@ jobs:
         run: python -m py_compile cloud_control/server.py cloud_control/web_gallery.py
       - name: Test 1-day licenses, private upload, gallery and public links
         run: python -m unittest discover -s cloud_control/tests -p 'test_gallery_storage.py' -v
+      - name: Test license renewal, 1-day generation, prices and discounts
+        run: python -m unittest cloud_control.tests.test_publish_auth -v
