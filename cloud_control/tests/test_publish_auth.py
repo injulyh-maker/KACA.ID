@@ -69,7 +69,44 @@ class PublishAuthTests(unittest.TestCase):
         self.assertEqual(self.post('/api/admin/plans',{'days':30,'price_idr':100000},fresh).status_code,403)
         self.assertEqual(self.post('/api/admin/plans',{'days':30,'price_idr':100000},admin.json()['token']).status_code,200)
         public=self.client.get('/api/public/plans').json()
-        self.assertEqual(public['plans'][0]['price_idr'],100000)
+        self.assertEqual(next(p for p in public['plans'] if p['days']==30)['price_idr'],100000)
+        # A 1-day serial can be issued and renewed without changing the serial
+        # or the hardware/device binding of an already activated booth.
+        one_day=self.post('/api/admin/licenses',
+                          {'owner_email':user['email'],'days':1},admin.json()['token'])
+        self.assertEqual(one_day.status_code,200,one_day.text)
+        self.assertEqual(
+            self.s.verify_license(activated.json()['offline_license'])['booth_id'],
+            activated.json()['booth_id'])
+        renewed=self.post('/api/admin/licenses/'+issue.json()['id']+'/renew',
+                          {'days':1},admin.json()['token'])
+        self.assertEqual(renewed.status_code,200,renewed.text)
+        self.assertEqual(renewed.json()['license_id'],issue.json()['id'])
+        self.assertEqual(renewed.json()['booth_id'],activated.json()['booth_id'])
+        self.assertEqual(renewed.json()['expires_at'],
+                         issue.json()['expires_at']+86400)
+        refresh=self.client.post('/api/agent/license/refresh',headers={
+            'X-Booth-Id':activated.json()['booth_id'],
+            'X-Booth-Key':activated.json()['booth_key']})
+        self.assertEqual(refresh.status_code,200,refresh.text)
+        self.assertEqual(self.s.verify_license(refresh.json()['offline_license'])['exp'],
+                         renewed.json()['expires_at'])
+        new_price=self.post('/api/admin/plans',
+            {'days':30,'price_idr':200000,'original_price_idr':250000,'show_discount':False},
+            admin.json()['token'])
+        self.assertEqual(new_price.status_code,200,new_price.text)
+        priced=next(p for p in self.client.get('/api/public/plans').json()['plans']
+                    if p['days']==30)
+        self.assertEqual(priced['price_idr'],200000)
+        self.assertEqual(priced['original_price_idr'],250000)
+        self.assertEqual(priced['discount_idr'],50000)
+        self.assertFalse(priced['show_discount'])
+        one_day_plan=self.post('/api/admin/plans',
+            {'days':1,'price_idr':10000,'original_price_idr':15000,'show_discount':True},
+            admin.json()['token'])
+        self.assertEqual(one_day_plan.status_code,200,one_day_plan.text)
+        self.assertEqual(next(p for p in self.client.get('/api/public/plans').json()['plans']
+                              if p['days']==1)['discount_percent'],33)
         self.assertEqual(self.client.get('/api/public/plans').json()['whatsapp'],'6281934386108')
         for path in ['/paket','/verifikasi-email','/reset-sandi']:
             self.assertEqual(self.client.get(path).status_code,200)
