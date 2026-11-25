@@ -222,7 +222,7 @@ async function loadPage(page,silent=false){const start=page;switch(page){case 'd
  $('sessionPrev').disabled=sessionOffset<=0;$('sessionNext').disabled=!d.has_more;
  $('sessionPagerLabel').textContent=d.total?`Menampilkan ${sessionOffset+1}–${sessionOffset+d.sessions.length} dari ${d.total} sesi`:'Belum ada sesi';
  break;}
-case 'gallery':{await loadWebGallery();break;}case 'webshare':{await loadGallerySettings();break;}case 'settings':case 'vouchers':case 'remote':{await fetchBooths();if(page==='settings')await loadCameraCaps();if(page==='vouchers')await loadVoucherCommands();if(page==='remote')refreshRemote();break;}case 'licenses':{const d=await api('/licenses');const t=$('licenseRows');clear(t);for(const l of d.licenses){const tr=document.createElement('tr');cell(tr,l.display_code);cell(tr,fmt(l.expires_at));cell(tr,l.status);cell(tr,l.booth_id||'Belum diaktifkan');t.append(tr)}break;}case 'admin':{if(account.role!=='superadmin')return;const d=await api('/admin/users');const t=$('adminUsers');clear(t);for(const u of d.users){const tr=document.createElement('tr');cell(tr,u.email);cell(tr,u.name);cell(tr,u.role);t.append(tr)}await loadAdminExtras();break;}}}
+case 'gallery':{await loadWebGallery();break;}case 'webshare':{await loadGallerySettings();break;}case 'settings':case 'vouchers':case 'remote':{await fetchBooths();if(page==='settings')await loadCameraCaps();if(page==='vouchers')await loadVoucherCommands();if(page==='remote')refreshRemote();break;}case 'licenses':{const d=await api('/licenses');const t=$('licenseRows');clear(t);for(const l of d.licenses){const tr=document.createElement('tr');cell(tr,l.display_code);cell(tr,fmt(l.expires_at));cell(tr,l.status==='active'?(l.expires_at<=Math.floor(Date.now()/1000)?'Kedaluwarsa':l.expires_at<=Math.floor(Date.now()/1000)+7*86400?'Segera kedaluwarsa':'Aktif'):'Ditangguhkan');cell(tr,l.booth_id||'Belum diaktifkan');t.append(tr)}break;}case 'admin':{if(account.role!=='superadmin')return;const d=await api('/admin/users');const t=$('adminUsers');clear(t);for(const u of d.users){const tr=document.createElement('tr');cell(tr,u.email);cell(tr,u.name);cell(tr,u.role);t.append(tr)}await loadAdminExtras();break;}}}
 function sessionFilters(){
  const params=new URLSearchParams();
  for(const [id,key] of [['sessionBooth','booth_id'],['sessionMode','mode'],['sessionFrom','date_from'],['sessionTo','date_to']]){
@@ -319,7 +319,7 @@ async function loadAdminExtras(){
  const t=$('adminLicenseRows');clear(t);
  for(const l of licenses.licenses){const tr=document.createElement('tr');
    cell(tr,l.owner_email);cell(tr,l.display_code);cell(tr,l.booth_name||'Belum aktif');
-   cell(tr,fmt(l.expires_at));cell(tr,l.status);
+   cell(tr,fmt(l.expires_at));cell(tr,l.status==='active'?(l.expires_at<=Math.floor(Date.now()/1000)?'Kedaluwarsa':l.expires_at<=Math.floor(Date.now()/1000)+7*86400?'Segera kedaluwarsa':'Aktif'):'Ditangguhkan');
    const actions=cell(tr,'');const suspend=l.status==='active',btn=node('button',suspend?'Tangguhkan':'Aktifkan','btn sm '+(suspend?'danger':'alt'));
    btn.onclick=async()=>{
      if(!confirm((suspend?'Tangguhkan':'Aktifkan kembali')+' lisensi '+l.display_code+'?'+
