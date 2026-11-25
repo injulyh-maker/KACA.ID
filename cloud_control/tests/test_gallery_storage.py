@@ -51,6 +51,42 @@ class GalleryCloudTests(unittest.TestCase):
         self.assertGreater(self.issued['expires_at'],self.s.unix()+23*3600)
         self.assertLessEqual(self.issued['expires_at'],self.s.unix()+86400+60)
 
+    def test_z_license_renewal_and_discount(self):
+        # Existing serial, owner and booth remain unchanged after renewal.
+        original=self.issued['expires_at']
+        noauth=self.client.post('/api/admin/licenses/'+self.issued['id']+'/renew',json={'days':1})
+        self.assertEqual(noauth.status_code,401)
+        owner=self.client.post('/api/admin/licenses/'+self.issued['id']+'/renew',
+                               json={'days':1},headers=self.oh)
+        self.assertEqual(owner.status_code,403)
+        bad=self.client.post('/api/admin/licenses/'+self.issued['id']+'/renew',
+                             json={'days':0},headers=self.ah)
+        self.assertEqual(bad.status_code,422)
+        renewed=self.client.post('/api/admin/licenses/'+self.issued['id']+'/renew',
+                                 json={'days':1},headers=self.ah)
+        self.assertEqual(renewed.status_code,200,renewed.text)
+        self.assertEqual(renewed.json()['expires_at'],original+86400)
+        self.assertEqual(renewed.json()['booth_id'],self.booth['booth_id'])
+        signed=self.client.post('/api/agent/license/refresh',headers=self.bh)
+        self.assertEqual(signed.status_code,200,signed.text)
+        self.assertEqual(self.s.verify_license(signed.json()['offline_license'])['exp'],original+86400)
+        self.assertEqual(self.s.verify_license(signed.json()['offline_license'])['booth_id'],
+                         self.booth['booth_id'])
+        self.assertEqual(self.client.post('/api/agent/license/refresh').status_code,401)
+        price=self.client.post('/api/admin/plans',headers=self.ah,
+             json={'days':30,'price_idr':200000,'original_price_idr':250000})
+        self.assertEqual(price.status_code,200,price.text)
+        plans=self.client.get('/api/public/plans').json()['plans']
+        thirty=next(p for p in plans if p['days']==30)
+        self.assertEqual(thirty['price_idr'],200000)
+        self.assertEqual(thirty['original_price_idr'],250000)
+        self.assertEqual(thirty['discount_idr'],50000)
+        self.assertEqual(thirty['discount_percent'],20)
+        self.assertEqual(self.client.post('/api/admin/plans',headers=self.ah,
+            json={'days':30,'price_idr':250001,'original_price_idr':250000}).status_code,400)
+        self.assertIn('Harga Normal',self.client.get('/').text)
+        self.assertIn('old-price',self.client.get('/paket').text)
+
     def test_gallery_upload_brand_qr_and_access_control(self):
         gallery=self.client.get('/api/gallery',headers=self.oh)
         self.assertEqual(gallery.status_code,200,gallery.text)
