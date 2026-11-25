@@ -100,6 +100,28 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
   config={...config,server:origin,boothId:r.booth_id,boothKey:r.booth_key,offlineLicense:r.offline_license,publicKey:r.license_public_key,licenseExpires:r.expires_at,boothName,required:true,lastObservedAt:Math.max(Number(config.lastObservedAt||0),Math.floor(Date.now()/1000))};
   save();lastError='';log('info',`KACA.ID Cloud activated booth=${r.booth_id}`);getMainWindow()?.webContents?.send('cloud:settings-updated');void sync();return status();
  }
+ async function refreshSignedLicense(){
+  // Refresh uses the booth's existing device-bound key. It also works after
+  // the *old* offline signature expired if the admin has renewed the serial.
+  if(!config.server||!config.boothId||!config.boothKey||!config.publicKey)return false;
+  try{
+   const renewed=await cloud('/agent/license/refresh',{method:'POST',timeout:20000});
+   if(!renewed.offline_license||!renewed.expires_at)return false;
+   const verified=verifyLicense(renewed.offline_license,config.publicKey,deviceId);
+   if(verified.booth_id!==config.boothId || verified.license_id!==JSON.parse(b64url(config.offlineLicense.split('.')[0]).toString()).license_id)
+     throw Error('Identitas lisensi diperpanjang tidak sesuai dengan perangkat.');
+   if(Number(renewed.expires_at)>Number(config.licenseExpires||0)||
+      !validOffline()){
+      config.offlineLicense=renewed.offline_license;
+      config.licenseExpires=Number(renewed.expires_at);
+      config.lastObservedAt=Math.max(Number(config.lastObservedAt||0),Math.floor(Date.now()/1000));
+      save();lastError='';
+      getMainWindow()?.webContents?.send('cloud:settings-updated');
+      log('info','Masa aktif lisensi Cloud diperbarui pada perangkat.');
+   }
+   return true;
+  }catch(err){log('warn','Pemeriksaan perpanjangan lisensi: '+String(err.message).slice(0,130));return false;}
+ }
  async function localJSON(route,{method='GET',json=null}={}){
   return httpJSON('http://127.0.0.1:8765'+route,{method,json,timeout:4200});
  }
@@ -505,11 +527,12 @@ function initCloudAgent({app,getMainWindow,readSettings,writeSettings,log}){
  }
  // Permit browsing Settings and activating from the dedicated License menu.
  // Session start is independently gated by cloud:assert-license.
+ const licenseRefreshTick=setInterval(()=>{void refreshSignedLicense()},60000);
  const tick=setInterval(()=>{void sync()},30000);
  const galleryTick=setInterval(()=>{void realtimeGalleryTick()},5000);
  const screenshots=setInterval(()=>{void snapshot()},4000);
- tick.unref?.();galleryTick.unref?.();screenshots.unref?.();
- setTimeout(()=>{void sync()},3500);
- return {status,sync,openActivation,stop:()=>{clearInterval(tick);clearInterval(galleryTick);clearInterval(screenshots)},validOffline};
+ licenseRefreshTick.unref?.();tick.unref?.();galleryTick.unref?.();screenshots.unref?.();
+ setTimeout(()=>{void refreshSignedLicense().then(()=>sync())},3500);
+ return {status,sync,openActivation,stop:()=>{clearInterval(licenseRefreshTick);clearInterval(tick);clearInterval(galleryTick);clearInterval(screenshots)},validOffline};
 }
 module.exports={initCloudAgent,verifyLicense,hardwareId};
